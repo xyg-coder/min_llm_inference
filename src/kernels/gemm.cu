@@ -1,5 +1,6 @@
 #include <cstddef>
 #include <cuda_runtime.h>
+#include <stdexcept>
 #include "kernels/gemm.h"
 
 /**
@@ -27,12 +28,16 @@ __global__ void gemm_kernel(const T* s1, const T* s2, T* output, size_t batch_si
             s2_shared[threadIdx.y][threadIdx.x] = 0;
         }
         __syncthreads();
+
+        #pragma unroll
         for (size_t j = 0; j < TILE_SIZE; ++j) {
             result += (s1_shared[threadIdx.y][j] * s2_shared[j][threadIdx.x]);
         }
         __syncthreads();
     }
-    output[blockIdx.z * rows * cols + (blockIdx.y * TILE_SIZE + threadIdx.y) * cols + blockIdx.x * TILE_SIZE + threadIdx.x] = result;
+    if (blockIdx.y * TILE_SIZE + threadIdx.y < rows && blockIdx.x * TILE_SIZE + threadIdx.x < cols) {
+        output[blockIdx.z * rows * cols + (blockIdx.y * TILE_SIZE + threadIdx.y) * cols + blockIdx.x * TILE_SIZE + threadIdx.x] = result;
+    }
 }
 
 template<typename T>
@@ -40,6 +45,10 @@ void launch_gemm_kernel(const T* s1, const T* s2, T* output, size_t batch_size, 
     dim3 blockDim(TILE_SIZE, TILE_SIZE);
     dim3 gridDim((cols + TILE_SIZE - 1) / TILE_SIZE, (rows + TILE_SIZE - 1) / TILE_SIZE, batch_size);
     gemm_kernel<<<gridDim, blockDim>>>(s1, s2, output, batch_size, rows, N, cols);
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        throw(std::runtime_error("Gemm kernel throws exception"));
+    }
 }
 
 // Explicit template instantiation
