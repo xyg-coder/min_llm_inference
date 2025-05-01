@@ -54,3 +54,6 @@ void launch_gemm_kernel(const T* s1, const T* s2, T* output, size_t batch_size, 
 // Explicit template instantiation
 template void launch_gemm_kernel<float>(const float*, const float*, float*, 
     size_t, size_t, size_t, size_t);
+
+template void launch_gemm_kernel<int>(const int*, const int*, int*, 
+    size_t, size_t, size_t, size_t);
