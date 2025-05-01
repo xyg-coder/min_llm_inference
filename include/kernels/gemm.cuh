@@ -1,6 +1,5 @@
 #include <cstddef>
 #include <cuda_runtime.h>
-#include <stdexcept>
 
 #define TILE_SIZE 16
 

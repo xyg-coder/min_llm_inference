@@ -1,16 +1,16 @@
 #pragma once
 #include "model.h"
 #include "tensor.hpp"
-#include <memory>
+#include <optional>
 #include <stdexcept>
 #include <variant>
-#include "kernels/gemm.h"
+#include "kernels/gemm.cuh"
 
 template <typename T>
 class FeedForward : public Layer<T> {
 public:
-    FeedForward(std::unique_ptr<Tensor<T>> w, std::unique_ptr<Tensor<T>> b = nullptr): weight_(std::move(w)), bias_(std::move(b)) {
-        auto weight_shape = weight_->shape();
+    FeedForward(Tensor<T> w, std::optional<Tensor<T>> b = std::nullopt): weight_(std::move(w)), bias_(std::move(b)) {
+        auto weight_shape = weight_.shape();
         if (weight_shape.size() != 2) {
             throw std::invalid_argument("[FeedForward] Weight must be 2D (got shape size " +
                 std::to_string(weight_shape.size()) + ")");
@@ -34,9 +34,8 @@ public:
     
     ModelIO<T> forward(const ModelIO<T>& input) override;
 private:
-    std::unique_ptr<Tensor<T>> weight_;
-    // if not nullptr, would be [output_features]
-    std::unique_ptr<Tensor<T>> bias_;
+    Tensor<T> weight_;
+    std::optional<Tensor<T>> bias_;
 };
 
 template <typename T>
@@ -48,14 +47,20 @@ ModelIO<T> FeedForward<T>::forward(const ModelIO<T>& input) {
     const Tensor<T>& input_t = std::get<Tensor<T>>(input);
     size_t n_batch = input_t.shape()[0];
     size_t in_features = input_t.shape()[1];
-    size_t out_features = weight_->shape()[1];
+    size_t out_features = weight_.shape()[1];
 
     Tensor<T> output_tensor({n_batch, out_features}, DeviceType::DEVICE);
+    T* bias_data_ptr = nullptr;
+    Stride3D bias_stride({0, 0, 0});
+    if (bias_) {
+        bias_data_ptr = bias_->data();
+        bias_stride = Stride3D({0, 0, 1});
+    }
 
     launch_gemm_bias_kernel(
         input_t.data(), Stride3D{0, in_features, 1},
-        weight_->data(), Stride3D{0, out_features, 1},
-        bias_ == nullptr ? nullptr : bias_->data(), Stride3D{0, 0, 1},
+        weight_.data(), Stride3D{0, out_features, 1},
+        bias_data_ptr, bias_stride,
         output_tensor.data(), Stride3D{0, out_features, 1},
         1, n_batch, in_features, out_features
     );

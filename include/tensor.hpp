@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 #include <cuda_runtime.h>
@@ -10,29 +12,35 @@ enum class DeviceType {
     DEVICE
 };
 
-
-
-
-
 template <typename T>
 class Tensor {
 public:
     Tensor(const std::vector<size_t>& shape, DeviceType device = DeviceType::HOST);
-    Tensor(const Tensor&) = delete;
-    Tensor& operator=(const Tensor&) = delete;
-    ~Tensor();
+    Tensor(const Tensor&) = default;
+    Tensor& operator=(const Tensor&) = default;
+    ~Tensor() = default;
 
     const std::vector<size_t>& shape() const { return shape_; }
     DeviceType device() const { return device_; }
-    T* data() { return static_cast<T*>(data_); }
+    T* data() { return reinterpret_cast<T*>(data_.get()); }
     void copy_from(const Tensor& other);
-    const T* data() const { return static_cast<const T*>(data_); }
+    const T* data() const { return reinterpret_cast<const T*>(data_.get()); }
 
 private:
     std::vector<size_t> shape_;
     size_t size_;
     DeviceType device_;
-    void* data_;
+
+    struct Deleter {
+        DeviceType device;
+        void operator()(void* p) const {
+            if (!p) return;
+            if (device == DeviceType::HOST) delete[] reinterpret_cast<T*>(p);
+            else cudaFree(p);
+        }
+    };
+
+    std::shared_ptr<void> data_; // points to allocated memory (host or device)
 };
 
 
@@ -42,37 +50,35 @@ Tensor<T>::Tensor(const std::vector<size_t>& shape, DeviceType device): shape_(s
     for (auto d : shape_) {
         size_ *= d;
     }
+    void* ptr;
     if (device_ == DeviceType::HOST) {
-        data_ = (void*)new T[size_];
+        ptr = (void*)new T[size_];
     } else {
-        cudaError_t err = cudaMalloc(&data_, sizeof(T) * size_);
+        cudaError_t err = cudaMalloc(&ptr, sizeof(T) * size_);
         if (err != cudaSuccess) {
+            std::cerr << "CudaMalloc failure: " << cudaGetErrorString(err)
+                << ", trying to allocate " << sizeof(T) * size_ << std::endl;
             throw std::runtime_error("cudaMalloc failed!");
         }
     }
-}
-
-template<typename T>
-Tensor<T>::~Tensor() {
-    if (device_ == DeviceType::HOST) {
-        delete[] (static_cast<T*>(data_));
-    } else {
-        cudaFree(data_);
-    }
+    data_ = std::shared_ptr<void>(ptr, Deleter{device});
 }
 
 template<typename T>
 void Tensor<T>::copy_from(const Tensor& other) {
     if (other.size_ != size_ || other.device_ == device_)
-        throw std::runtime_error("Copy from: shape or device mismatch");
+        throw std::runtime_error("Copy from: shape or device mismatch, and we only support copy from different devices");
 
+    cudaError err;
     if (device_ == DeviceType::HOST && other.device_ == DeviceType::DEVICE) {
-        cudaMemcpy(data_, other.data_, size_ * sizeof(T), cudaMemcpyDeviceToHost);
-    }
-    else if (device_ == DeviceType::DEVICE && other.device_ == DeviceType::HOST) {
-        cudaMemcpy(data_, other.data_, size_ * sizeof(T), cudaMemcpyHostToDevice);
-    }
-    else {
+        err = cudaMemcpy(data(), other.data(), size_ * sizeof(T), cudaMemcpyDeviceToHost);
+    } else if (device_ == DeviceType::DEVICE && other.device_ == DeviceType::HOST) {
+        err = cudaMemcpy(data(), other.data(), size_ * sizeof(T), cudaMemcpyHostToDevice);
+    } else {
         throw std::runtime_error("Unsupported copy direction");
+    }
+
+    if (err != cudaSuccess) {
+        std::cerr << "Memory copy error: " << cudaGetErrorString(err) << std::endl;
     }
 }
