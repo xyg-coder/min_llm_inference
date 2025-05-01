@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Enable CUDA
 enable_language(CUDA)
-find_package(CUDA REQUIRED)
+find_package(CUDAToolkit REQUIRED)
 
 # Add source files
 set(INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include)
@@ -15,11 +15,21 @@ set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
 set(KERNELS_DIR ${SRC_DIR}/kernels)
 set(TESTS_DIR ${CMAKE_SOURCE_DIR}/tests)
 
-# Add the main library
+# Glob (recursively) all .cpp, .cu, .cuh, .hpp, .h files in include and src
+file(GLOB_RECURSE ALL_HEADERS
+    "${INCLUDE_DIR}/*.hpp"
+    "${INCLUDE_DIR}/*.h"
+    "${INCLUDE_DIR}/*.cuh"
+)
+file(GLOB_RECURSE ALL_SOURCES
+    "${SRC_DIR}/*.cpp"
+    "${SRC_DIR}/*.cu"
+)
+
+# Add the main library with all headers and source files
 add_library(min_llm_inference
-    ${INCLUDE_DIR}/kernels/gemm.h
-    ${KERNELS_DIR}/gemm.cu
-    ${INCLUDE_DIR}/tensor.hpp
+    ${ALL_HEADERS}
+    ${ALL_SOURCES}
 )
 
 # Set CUDA properties
@@ -32,7 +42,7 @@ set_target_properties(min_llm_inference PROPERTIES
 target_include_directories(min_llm_inference 
     PUBLIC 
         ${INCLUDE_DIR}
-        ${CUDA_INCLUDE_DIRS}
+        ${CUDAToolkit_INCLUDE_DIRS}
 )
 
 # Add Google Test
@@ -44,9 +54,13 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-# Add test executable
+# Have to split into single tests, otherwise malloc allocation might fail
 add_executable(gemm_test
     ${TESTS_DIR}/gemm_test.cpp
+)
+
+add_executable(feed_forward_test
+    ${TESTS_DIR}/feed_forward_layer_test.cpp
 )
 
 # Link libraries
@@ -55,6 +69,12 @@ target_link_libraries(gemm_test
     gtest_main
 )
 
+target_link_libraries(feed_forward_test
+    min_llm_inference
+    gtest_main
+)
+
 # Enable testing
 enable_testing()
 add_test(NAME gemm_test COMMAND gemm_test)
+add_test(NAME feed_forward_test COMMAND feed_forward_test)
