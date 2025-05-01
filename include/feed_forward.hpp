@@ -4,6 +4,7 @@
 #include <memory>
 #include <stdexcept>
 #include <variant>
+#include "kernels/gemm.h"
 
 template <typename T>
 class FeedForward : public Layer<T> {
@@ -34,6 +35,7 @@ public:
     ModelIO<T> forward(const ModelIO<T>& input) override;
 private:
     std::unique_ptr<Tensor<T>> weight_;
+    // if not nullptr, would be [output_features]
     std::unique_ptr<Tensor<T>> bias_;
 };
 
@@ -44,6 +46,19 @@ ModelIO<T> FeedForward<T>::forward(const ModelIO<T>& input) {
     }
 
     const Tensor<T>& input_t = std::get<Tensor<T>>(input);
-    // TODO: to add the feedforward logic
+    size_t n_batch = input_t.shape()[0];
+    size_t in_features = input_t.shape()[1];
+    size_t out_features = weight_->shape()[1];
 
+    Tensor<T> output_tensor({n_batch, out_features}, DeviceType::DEVICE);
+
+    launch_gemm_bias_kernel(
+        input_t.data(), Stride3D{0, in_features, 1},
+        weight_->data(), Stride3D{0, out_features, 1},
+        bias_ == nullptr ? nullptr : bias_->data(), Stride3D{0, 0, 1},
+        output_tensor.data(), Stride3D{0, out_features, 1},
+        1, n_batch, in_features, out_features
+    );
+
+    return output_tensor;
 }

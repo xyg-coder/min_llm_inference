@@ -15,11 +15,21 @@ set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
 set(KERNELS_DIR ${SRC_DIR}/kernels)
 set(TESTS_DIR ${CMAKE_SOURCE_DIR}/tests)
 
-# Add the main library
+# Glob (recursively) all .cpp, .cu, .cuh, .hpp, .h files in include and src
+file(GLOB_RECURSE ALL_HEADERS
+    "${INCLUDE_DIR}/*.hpp"
+    "${INCLUDE_DIR}/*.h"
+    "${INCLUDE_DIR}/*.cuh"
+)
+file(GLOB_RECURSE ALL_SOURCES
+    "${SRC_DIR}/*.cpp"
+    "${SRC_DIR}/*.cu"
+)
+
+# Add the main library with all headers and source files
 add_library(min_llm_inference
-    ${INCLUDE_DIR}/kernels/gemm.h
-    ${KERNELS_DIR}/gemm.cu
-    ${INCLUDE_DIR}/tensor.hpp
+    ${ALL_HEADERS}
+    ${ALL_SOURCES}
 )
 
 # Set CUDA properties

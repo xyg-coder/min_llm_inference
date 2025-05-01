@@ -10,6 +10,10 @@ enum class DeviceType {
     DEVICE
 };
 
+
+
+
+
 template <typename T>
 class Tensor {
 public:
