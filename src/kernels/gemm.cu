@@ -50,11 +50,6 @@ __global__ void gemm_bias_kernel(
             + (blockIdx.x * TILE_SIZE + threadIdx.x) * output_stride.col_stride]
             = result + base_bias[(blockIdx.y * TILE_SIZE + threadIdx.y) * bias_stride.row_stride
                 + ((blockIdx.x * TILE_SIZE + threadIdx.x) * bias_stride.col_stride)];
-        // printf("%d: %f\n", blockIdx.z * output_stride.batch_stride
-        //     + (blockIdx.y * TILE_SIZE + threadIdx.y) * output_stride.row_stride
-        //     + (blockIdx.x * TILE_SIZE + threadIdx.x) * output_stride.col_stride, output[blockIdx.z * output_stride.batch_stride
-        //         + (blockIdx.y * TILE_SIZE + threadIdx.y) * output_stride.row_stride
-        //         + (blockIdx.x * TILE_SIZE + threadIdx.x) * output_stride.col_stride]);
     }
 }
 
