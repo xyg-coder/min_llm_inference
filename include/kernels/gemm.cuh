@@ -1,7 +1,7 @@
 #include <cstddef>
 #include <cuda_runtime.h>
 
-#define TILE_SIZE 16
+const int TILE_SIZE = 16;
 
 struct Stride3D {
     size_t batch_stride;

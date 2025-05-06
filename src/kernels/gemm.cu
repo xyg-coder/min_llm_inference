@@ -1,6 +1,6 @@
 #include "kernels/gemm.cuh"
+#include "utils.h"
 #include <cstddef>
-#include <stdexcept>
 
 /**
     s1: [batch_size, rows, N]
@@ -73,10 +73,7 @@ void launch_gemm_kernel(const T* s1, const T* s2, T* output, size_t batch_size, 
         null_float, Stride3D{0, 0, 0},
         output, Stride3D{rows * cols, cols, 1},
         batch_size, rows, N, cols);
-    cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        throw(std::runtime_error("Gemm kernel throws exception"));
-    }
+    cuda_check(cudaGetLastError(), __FILE__, __LINE__);
 }
 
 template<typename T>
@@ -94,10 +91,7 @@ void launch_gemm_bias_kernel(
         bias, bias_stride,
         output, output_stride,
         batch_size, rows, N, cols);
-    cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        throw(std::runtime_error("Gemm kernel throws exception"));
-    }
+    cuda_check(cudaGetLastError(), __FILE__, __LINE__);
 }
 
 
