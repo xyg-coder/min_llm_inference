@@ -1,32 +1,27 @@
 #pragma once
-#include "tensor.hpp"
+#include "tensor.h"
 #include <map>
 #include <memory>
 #include <string>
 #include <variant>
 #include <vector>
 
-template <typename T>
-using TensorList = std::vector<Tensor<T>>;
+using TensorList = std::vector<Tensor>;
 
-template <typename T>
-using TensorDict = std::map<std::string, Tensor<T>>;
+using TensorDict = std::map<std::string, Tensor>;
 
-template <typename T>
-using ModelIO = std::variant<Tensor<T>, TensorDict<T>, TensorList<T>>;
+using ModelIO = std::variant<Tensor, TensorDict, TensorList>;
 
-template <typename T>
 class Layer {
 public:
     virtual ~Layer() {}
-    virtual ModelIO<T> forward(const ModelIO<T>& input) = 0;
+    virtual ModelIO forward(const ModelIO& input) = 0;
 };
 
-template <typename T>
 class Model {
 public:
-    void add_layer(Layer<T>* layer);
-    ModelIO<T> forward(const ModelIO<T>& input);
+    void add_layer(Layer* layer);
+    ModelIO forward(const ModelIO& input);
 private:
-    std::vector<std::unique_ptr<Layer<T>>> layers;
+    std::vector<std::unique_ptr<Layer>> layers;
 };

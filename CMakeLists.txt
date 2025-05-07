@@ -63,6 +63,10 @@ add_executable(feed_forward_test
     ${TESTS_DIR}/feed_forward_layer_test.cpp
 )
 
+add_executable(softmax_test
+    ${TESTS_DIR}/softmax_test.cpp
+)
+
 # Link libraries
 target_link_libraries(gemm_test
     min_llm_inference
@@ -74,7 +78,13 @@ target_link_libraries(feed_forward_test
     gtest_main
 )
 
+target_link_libraries(softmax_test
+    min_llm_inference
+    gtest_main
+)
+
 # Enable testing
 enable_testing()
 add_test(NAME gemm_test COMMAND gemm_test)
 add_test(NAME feed_forward_test COMMAND feed_forward_test)
+add_test(NAME softmax_test COMMAND softmax_test)

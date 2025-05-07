@@ -1,0 +1,95 @@
+#include <cmath>
+#include <gtest/gtest.h>
+#include "kernels/rand_assign.h"
+#include "kernels/softmax.h"
+#include "tensor.h"
+#include <cuda_runtime.h>
+
+TEST(SoftmaxTest, SoftMaxTest) {
+    constexpr int N = 8, T = 1024;
+    Tensor input_h({N, T, T}, DeviceType::HOST);
+    Tensor input_d({N, T, T}, DeviceType::DEVICE);
+
+    launch_randn_kernel(input_d.data(), N * T * T);
+    input_h.copy_from(input_d);
+    float* input_data = input_h.data();
+    
+
+    Tensor output_h({N, T, T}, DeviceType::HOST);
+    float* output_data = output_h.data();
+
+    // Compute expected softmax results on CPU for each row
+    for (int row = 0; row < N; ++row) {
+        float maxval = -std::numeric_limits<float>::infinity();
+        for (int col = 0; col < T; ++col) {
+            maxval = std::max(maxval, input_data[row*T + col]);
+        } 
+        float sum = 0.0f;
+        for (int col = 0; col < T; ++col) {
+            sum += std::exp(input_data[row*T + col] - maxval);
+        }
+        for (int col = 0; col < T; ++col) {
+            output_data[row*T + col] = std::exp(input_data[row*T + col] - maxval) / sum;
+        }
+    }
+
+
+    Tensor output_d({N, T, T}, DeviceType::DEVICE);
+
+    // Call the kernel launcher
+    launch_softmax_kernel(input_d.data(), output_d.data(), N, T);
+
+    Tensor output_copy_h({N, T, T}, DeviceType::HOST);
+    output_copy_h.copy_from(output_d);
+
+
+    // Check results
+    for (int i = 0; i < N * T; ++i) {
+        ASSERT_NEAR(output_copy_h.data()[i], output_data[i], 1e-4f);
+    }
+}
+
+// Just to test that the cuda can run large scale softmax
+TEST(SoftmaxTest, SoftMaxLargeTest) {
+    constexpr int N = 800, T = 1024;
+    Tensor input_h({N, T, T}, DeviceType::HOST);
+    Tensor input_d({N, T, T}, DeviceType::DEVICE);
+
+    launch_randn_kernel(input_d.data(), N * T * T);
+
+    input_h.copy_from(input_d);
+
+    Tensor output_h({N, T, T}, DeviceType::HOST);
+    float* output_data = output_h.data();
+
+    const int CPU_N = 20;
+    float* input_data = input_h.data();
+    // Compute expected softmax results on CPU for each row
+    for (int row = 0; row < CPU_N; ++row) {
+        float maxval = -std::numeric_limits<float>::infinity();
+        for (int col = 0; col < T; ++col) {
+            maxval = std::max(maxval, input_data[row*T + col]);
+        } 
+        float sum = 0.0f;
+        for (int col = 0; col < T; ++col) {
+            sum += std::exp(input_data[row*T + col] - maxval);
+        }
+        for (int col = 0; col < T; ++col) {
+            output_data[row*T + col] = std::exp(input_data[row*T + col] - maxval) / sum;
+        }
+    }
+
+    Tensor output_d({N, T, T}, DeviceType::DEVICE);
+
+    // Call the kernel launcher
+    launch_softmax_kernel(input_d.data(), output_d.data(), N, T);
+
+    Tensor output_copy_h({N, T, T}, DeviceType::HOST);
+    output_copy_h.copy_from(output_d);
+
+
+    // Check results
+    for (int i = 0; i < CPU_N * T; ++i) {
+        ASSERT_NEAR(output_copy_h.data()[i], output_data[i], 1e-4f);
+    }
+}

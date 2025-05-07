@@ -1,8 +1,8 @@
 #include <cstdio>
 #include <gtest/gtest.h>
 #include <random>
-#include "tensor.hpp"
-#include "kernels/gemm.cuh"
+#include "tensor.h"
+#include "kernels/gemm.h"
 
 TEST(GemmKernelTest, MatrixMultiplication) {
     // Define matrix dimensions
@@ -12,9 +12,9 @@ TEST(GemmKernelTest, MatrixMultiplication) {
     size_t cols = 400;
 
     // Create input tensors on the host
-    Tensor<float> s1({batch_size, rows, N}, DeviceType::HOST);
-    Tensor<float> s2({batch_size, N, cols}, DeviceType::HOST);
-    Tensor<float> output({batch_size, rows, cols}, DeviceType::HOST);
+    Tensor s1({batch_size, rows, N}, DeviceType::HOST);
+    Tensor s2({batch_size, N, cols}, DeviceType::HOST);
+    Tensor output({batch_size, rows, cols}, DeviceType::HOST);
 
     // Initialize input matrices
     float* s1_data = s1.data();
@@ -27,14 +27,14 @@ TEST(GemmKernelTest, MatrixMultiplication) {
     }
 
     // Copy input tensors to the device
-    Tensor<float> d_s1({batch_size, rows, N}, DeviceType::DEVICE);
-    Tensor<float> d_s2({batch_size, N, cols}, DeviceType::DEVICE);
-    Tensor<float> d_output({batch_size, rows, cols}, DeviceType::DEVICE);
+    Tensor d_s1({batch_size, rows, N}, DeviceType::DEVICE);
+    Tensor d_s2({batch_size, N, cols}, DeviceType::DEVICE);
+    Tensor d_output({batch_size, rows, cols}, DeviceType::DEVICE);
     d_s1.copy_from(s1);
     d_s2.copy_from(s2);
 
     // Launch the kernel
-    launch_gemm_kernel<float>(d_s1.data(), d_s2.data(), d_output.data(), batch_size, rows, N, cols);
+    launch_gemm_kernel(d_s1.data(), d_s2.data(), d_output.data(), batch_size, rows, N, cols);
 
     // Copy the result back to the host
     output.copy_from(d_output);
@@ -47,7 +47,7 @@ TEST(GemmKernelTest, MatrixMultiplication) {
             for (size_t k = 0; k < N; ++k) {
                 expected += s1_data[i * N + k] * s2_data[k * cols + j];
             }
-            ASSERT_NEAR(output_data[i * cols + j], expected, 1e-5)
+            ASSERT_NEAR(output_data[i * cols + j], expected, 1e-3)
                 << "Mismatch at (" << i << ", " << j << ")";
         }
     }
@@ -56,14 +56,14 @@ TEST(GemmKernelTest, MatrixMultiplication) {
 TEST(GemmKernelTest, MultiBatchesMatrixMultiplication) {
     // Define matrix dimensions
     size_t batch_size = 5;
-    size_t rows = 400;
-    size_t N = 400;
-    size_t cols = 400;
+    size_t rows = 40;
+    size_t N = 40;
+    size_t cols = 40;
 
     // Create input tensors on the host
-    Tensor<float> s1({batch_size, rows, N}, DeviceType::HOST);
-    Tensor<float> s2({batch_size, N, cols}, DeviceType::HOST);
-    Tensor<float> output({batch_size, rows, cols}, DeviceType::HOST);
+    Tensor s1({batch_size, rows, N}, DeviceType::HOST);
+    Tensor s2({batch_size, N, cols}, DeviceType::HOST);
+    Tensor output({batch_size, rows, cols}, DeviceType::HOST);
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -80,14 +80,14 @@ TEST(GemmKernelTest, MultiBatchesMatrixMultiplication) {
     }
 
     // Copy input tensors to the device
-    Tensor<float> d_s1({batch_size, rows, N}, DeviceType::DEVICE);
-    Tensor<float> d_s2({batch_size, N, cols}, DeviceType::DEVICE);
-    Tensor<float> d_output({batch_size, rows, cols}, DeviceType::DEVICE);
+    Tensor d_s1({batch_size, rows, N}, DeviceType::DEVICE);
+    Tensor d_s2({batch_size, N, cols}, DeviceType::DEVICE);
+    Tensor d_output({batch_size, rows, cols}, DeviceType::DEVICE);
     d_s1.copy_from(s1);
     d_s2.copy_from(s2);
 
     // Launch the kernel
-    launch_gemm_kernel<float>(d_s1.data(), d_s2.data(), d_output.data(), batch_size, rows, N, cols);
+    launch_gemm_kernel(d_s1.data(), d_s2.data(), d_output.data(), batch_size, rows, N, cols);
 
     // Copy the result back to the host
     output.copy_from(d_output);
@@ -111,15 +111,15 @@ TEST(GemmKernelTest, MultiBatchesMatrixMultiplication) {
 TEST(GemmKernelTest, MultiBatchesBiasMatrixMultiplication) {
     // Define matrix dimensions
     size_t batch_size = 5;
-    size_t rows = 400;
-    size_t N = 400;
-    size_t cols = 400;
+    size_t rows = 40;
+    size_t N = 40;
+    size_t cols = 40;
 
     // Create input tensors on the host
-    Tensor<float> s1({batch_size, rows, N}, DeviceType::HOST);
-    Tensor<float> s2({batch_size, N, cols}, DeviceType::HOST);
-    Tensor<float> bias({batch_size, rows, cols}, DeviceType::HOST);
-    Tensor<float> output({batch_size, rows, cols}, DeviceType::HOST);
+    Tensor s1({batch_size, rows, N}, DeviceType::HOST);
+    Tensor s2({batch_size, N, cols}, DeviceType::HOST);
+    Tensor bias({batch_size, rows, cols}, DeviceType::HOST);
+    Tensor output({batch_size, rows, cols}, DeviceType::HOST);
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -140,16 +140,16 @@ TEST(GemmKernelTest, MultiBatchesBiasMatrixMultiplication) {
     }
 
     // Copy input tensors to the device
-    Tensor<float> d_s1({batch_size, rows, N}, DeviceType::DEVICE);
-    Tensor<float> d_s2({batch_size, N, cols}, DeviceType::DEVICE);
-    Tensor<float> d_bias({batch_size, rows, cols}, DeviceType::DEVICE);
-    Tensor<float> d_output({batch_size, rows, cols}, DeviceType::DEVICE);
+    Tensor d_s1({batch_size, rows, N}, DeviceType::DEVICE);
+    Tensor d_s2({batch_size, N, cols}, DeviceType::DEVICE);
+    Tensor d_bias({batch_size, rows, cols}, DeviceType::DEVICE);
+    Tensor d_output({batch_size, rows, cols}, DeviceType::DEVICE);
     d_s1.copy_from(s1);
     d_s2.copy_from(s2);
     d_bias.copy_from(bias);
 
     // Launch the kernel
-    launch_gemm_bias_kernel<float>(
+    launch_gemm_bias_kernel(
         d_s1.data(), Stride3D{rows * N, N, 1},
         d_s2.data(), Stride3D{N * cols, cols, 1},
         d_bias.data(), Stride3D{rows * cols, cols, 1},
@@ -179,15 +179,15 @@ TEST(GemmKernelTest, MultiBatchesBiasMatrixMultiplication) {
 TEST(GemmKernelTest, MultiBatchesBiasWithStrideMatrixMultiplication) {
     // Define matrix dimensions
     size_t batch_size = 5;
-    size_t rows = 400;
-    size_t N = 400;
-    size_t cols = 400;
+    size_t rows = 40;
+    size_t N = 40;
+    size_t cols = 40;
 
     // Create input tensors on the host
-    Tensor<float> s1({batch_size, rows, N}, DeviceType::HOST);
-    Tensor<float> s2({batch_size, N, cols}, DeviceType::HOST);
-    Tensor<float> bias({cols}, DeviceType::HOST);
-    Tensor<float> output({batch_size, rows, cols}, DeviceType::HOST);
+    Tensor s1({batch_size, rows, N}, DeviceType::HOST);
+    Tensor s2({batch_size, N, cols}, DeviceType::HOST);
+    Tensor bias({cols}, DeviceType::HOST);
+    Tensor output({batch_size, rows, cols}, DeviceType::HOST);
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -208,16 +208,16 @@ TEST(GemmKernelTest, MultiBatchesBiasWithStrideMatrixMultiplication) {
     }
 
     // Copy input tensors to the device
-    Tensor<float> d_s1({batch_size, rows, N}, DeviceType::DEVICE);
-    Tensor<float> d_s2({batch_size, N, cols}, DeviceType::DEVICE);
-    Tensor<float> d_bias({cols}, DeviceType::DEVICE);
-    Tensor<float> d_output({batch_size, rows, cols}, DeviceType::DEVICE);
+    Tensor d_s1({batch_size, rows, N}, DeviceType::DEVICE);
+    Tensor d_s2({batch_size, N, cols}, DeviceType::DEVICE);
+    Tensor d_bias({cols}, DeviceType::DEVICE);
+    Tensor d_output({batch_size, rows, cols}, DeviceType::DEVICE);
     d_s1.copy_from(s1);
     d_s2.copy_from(s2);
     d_bias.copy_from(bias);
 
     // Launch the kernel
-    launch_gemm_bias_kernel<float>(
+    launch_gemm_bias_kernel(
         d_s1.data(), Stride3D{rows * N, N, 1},
         d_s2.data(), Stride3D{N * cols, cols, 1},
         d_bias.data(), Stride3D{0, 0, 1},

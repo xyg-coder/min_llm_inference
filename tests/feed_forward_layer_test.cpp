@@ -1,6 +1,6 @@
-#include "feed_forward.hpp"
+#include "feed_forward.h"
 #include "model.h"
-#include "tensor.hpp"
+#include "tensor.h"
 #include <gtest/gtest.h>
 #include <random>
 
@@ -9,10 +9,10 @@ TEST(FeedForwardLayerTest, FeedForwardTest) {
     size_t in_features = 1024;
     size_t out_features = 1024;
 
-    Tensor<float> weights({in_features, out_features}, DeviceType::HOST);
-    Tensor<float> bias({out_features}, DeviceType::HOST);
-    Tensor<float> input({batch_size, in_features}, DeviceType::HOST);
-    Tensor<float> output({batch_size, out_features}, DeviceType::HOST);
+    Tensor weights({in_features, out_features}, DeviceType::HOST);
+    Tensor bias({out_features}, DeviceType::HOST);
+    Tensor input({batch_size, in_features}, DeviceType::HOST);
+    Tensor output({batch_size, out_features}, DeviceType::HOST);
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -33,18 +33,18 @@ TEST(FeedForwardLayerTest, FeedForwardTest) {
         input_data[i] = dis(gen);
     }
 
-    Tensor<float> weights_device({in_features, out_features}, DeviceType::DEVICE);
-    Tensor<float> bias_device({out_features}, DeviceType::DEVICE);
-    Tensor<float> input_device({batch_size, in_features}, DeviceType::DEVICE);
+    Tensor weights_device({in_features, out_features}, DeviceType::DEVICE);
+    Tensor bias_device({out_features}, DeviceType::DEVICE);
+    Tensor input_device({batch_size, in_features}, DeviceType::DEVICE);
     weights_device.copy_from(weights);
     bias_device.copy_from(bias);
     input_device.copy_from(input);
 
-    FeedForward<float> layer(std::move(weights_device), std::move(bias_device));
+    FeedForward layer(std::move(weights_device), std::move(bias_device));
 
     auto output_tensor = layer.forward(input_device);
 
-    const Tensor<float>& output_d = std::get<Tensor<float>>(output_tensor);
+    const Tensor& output_d = std::get<Tensor>(output_tensor);
     output.copy_from(output_d);
     float* output_data = output.data();
     for (size_t i = 0; i < batch_size; ++i) {
@@ -64,9 +64,9 @@ TEST(FeedForwardLayerTest, FeedForwardNoBiasTest) {
     size_t in_features = 1024;
     size_t out_features = 1024;
 
-    Tensor<float> weights({in_features, out_features}, DeviceType::HOST);
-    Tensor<float> input({batch_size, in_features}, DeviceType::HOST);
-    Tensor<float> output({batch_size, out_features}, DeviceType::HOST);
+    Tensor weights({in_features, out_features}, DeviceType::HOST);
+    Tensor input({batch_size, in_features}, DeviceType::HOST);
+    Tensor output({batch_size, out_features}, DeviceType::HOST);
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -83,16 +83,16 @@ TEST(FeedForwardLayerTest, FeedForwardNoBiasTest) {
         input_data[i] = dis(gen);
     }
 
-    Tensor<float> weights_device({in_features, out_features}, DeviceType::DEVICE);
-    Tensor<float> input_device({batch_size, in_features}, DeviceType::DEVICE);
+    Tensor weights_device({in_features, out_features}, DeviceType::DEVICE);
+    Tensor input_device({batch_size, in_features}, DeviceType::DEVICE);
     weights_device.copy_from(weights);
     input_device.copy_from(input);
 
-    FeedForward<float> layer(std::move(weights_device));
+    FeedForward layer(std::move(weights_device));
 
     auto output_tensor = layer.forward(input_device);
 
-    const Tensor<float>& output_d = std::get<Tensor<float>>(output_tensor);
+    const Tensor& output_d = std::get<Tensor>(output_tensor);
     output.copy_from(output_d);
     float* output_data = output.data();
     for (size_t i = 0; i < batch_size; ++i) {
