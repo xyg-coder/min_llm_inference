@@ -63,7 +63,7 @@ void launch_gemm_kernel(const float* s1, const float* s2, float* output, size_t 
         null_float, Stride3D{0, 0, 0},
         output, Stride3D{rows * cols, cols, 1},
         batch_size, rows, N, cols);
-    cuda_check(cudaGetLastError(), __FILE__, __LINE__);
+    CUDA_CHECK_LAST();
 }
 
 void launch_gemm_bias_kernel(
@@ -80,5 +80,5 @@ void launch_gemm_bias_kernel(
         bias, bias_stride,
         output, output_stride,
         batch_size, rows, N, cols);
-    cuda_check(cudaGetLastError(), __FILE__, __LINE__);
+    CUDA_CHECK_LAST();
 }

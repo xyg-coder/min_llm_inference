@@ -15,5 +15,5 @@ __global__ void randomizeArray(float *array, int N, unsigned long seed) {
 
 void launch_randn_kernel(float *out, int size) {
     randomizeArray<<<ceil_div(size, 256), 256>>>(out, size, time(NULL));
-    cuda_check(cudaGetLastError(), __FILE__, __LINE__);
+    CUDA_CHECK_LAST();
 }

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 
+// TODO: this deleter can be in another stream
 struct Deleter {
     DeviceType device;
     void operator()(void* p) const {
