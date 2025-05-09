@@ -1,6 +1,5 @@
 #include "tensor.h"
 #include <cassert>
-#include <cmath>
 #include "kernels/gemm.h"
 #include "kernels/softmax.h"
 #include "utils.h"
@@ -38,7 +37,7 @@ __global__ void kqt_kernel(const float* kqv, float* output, int n_batch, int n_s
 
     if (blockIdx.y * TILE_SIZE + threadIdx.y < n_sequence && blockIdx.x * TILE_SIZE + threadIdx.x < n_sequence) {
         output[blockIdx.z * n_sequence * n_sequence + (blockIdx.y * TILE_SIZE + threadIdx.y) * n_sequence + blockIdx.x * TILE_SIZE + threadIdx.x] =
-            result / sqrt(dims);
+            result / sqrtf(dims);
     }
 }
 
