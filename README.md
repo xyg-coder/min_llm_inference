@@ -6,3 +6,4 @@
 * Async tensor creation and deletion
 * Embedding
 * Demo inference
+* gemm test is flaky

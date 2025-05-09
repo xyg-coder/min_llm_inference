@@ -13,15 +13,19 @@ __global__ void kqt_kernel(const float* kqv, float* output, int n_batch, int n_s
     __shared__ float k_shared[TILE_SIZE][TILE_SIZE];
     __shared__ float q_shared[TILE_SIZE][TILE_SIZE];
     const float* base = kqv + (blockIdx.z * n_sequence * dims * 3);
+    int row = blockIdx.y * TILE_SIZE + threadIdx.y;
+    int write_col = blockIdx.x * TILE_SIZE + threadIdx.x;
+    // we want to keep coalensce, so during shared_memory reading, we use threadIdx.y instead
+    int read_tile_col = blockIdx.x * TILE_SIZE + threadIdx.y;
     float result = 0;
     for (int i = 0; i < dims; i += TILE_SIZE) {
-        if (blockIdx.y * TILE_SIZE + threadIdx.y < n_sequence && i + threadIdx.x < dims) {
-            k_shared[threadIdx.y][threadIdx.x] = base[(blockIdx.y * TILE_SIZE + threadIdx.y) * dims * 3 + i + threadIdx.x];
+        if (row < n_sequence && i + threadIdx.x < dims) {
+            k_shared[threadIdx.y][threadIdx.x] = base[row * dims * 3 + i + threadIdx.x];
         } else {
             k_shared[threadIdx.y][threadIdx.x] = 0;
         }
-        if (blockIdx.x * TILE_SIZE + threadIdx.x < n_sequence && i + threadIdx.x < dims) {
-            q_shared[threadIdx.y][threadIdx.x] = base[(blockIdx.x * TILE_SIZE + threadIdx.x) * dims * 3 + dims + i + threadIdx.x];
+        if (read_tile_col < n_sequence && i + threadIdx.x < dims) {
+            q_shared[threadIdx.y][threadIdx.x] = base[read_tile_col * dims * 3 + dims + i + threadIdx.x];
         } else {
             q_shared[threadIdx.y][threadIdx.x] = 0;
         }
@@ -35,15 +39,15 @@ __global__ void kqt_kernel(const float* kqv, float* output, int n_batch, int n_s
         __syncthreads();
     }
 
-    if (blockIdx.y * TILE_SIZE + threadIdx.y < n_sequence && blockIdx.x * TILE_SIZE + threadIdx.x < n_sequence) {
-        output[blockIdx.z * n_sequence * n_sequence + (blockIdx.y * TILE_SIZE + threadIdx.y) * n_sequence + blockIdx.x * TILE_SIZE + threadIdx.x] =
+    if (row < n_sequence && write_col < n_sequence) {
+        output[blockIdx.z * n_sequence * n_sequence + row * n_sequence + write_col] =
             result / sqrtf(dims);
     }
 }
 
 void launch_kqt_kernel(const float* kqv, float* output, int n_batch, int n_sequence, int dims) {
     dim3 blockDim(TILE_SIZE, TILE_SIZE);
-    dim3 gridDim(n_batch, ceil_div(n_sequence, TILE_SIZE), ceil_div(n_sequence, TILE_SIZE));
+    dim3 gridDim(ceil_div(n_sequence, TILE_SIZE), ceil_div(n_sequence, TILE_SIZE), n_batch);
     kqt_kernel<<<gridDim, blockDim>>>(kqv, output, n_batch, n_sequence, dims);
     CUDA_CHECK_LAST();
 }
@@ -93,7 +97,7 @@ void launch_softmax_v_kernel(
     int n_batch, int n_sequence, int dims) {
 
     dim3 blockDim(TILE_SIZE, TILE_SIZE);
-    dim3 gridDim(n_batch, ceil_div(n_sequence, TILE_SIZE), ceil_div(dims, TILE_SIZE));
+    dim3 gridDim(ceil_div(dims, TILE_SIZE), ceil_div(n_sequence, TILE_SIZE),  n_batch);
     softmax_v_kernel<<<gridDim, blockDim>>>(softmax_result, kqv, output, n_batch, n_sequence, dims);
     CUDA_CHECK_LAST();
 }
