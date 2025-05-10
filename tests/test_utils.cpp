@@ -5,18 +5,20 @@
 #include <cassert>
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
+#include <iostream>
 #include <utility>
 #include <gtest/gtest.h>
 #include <vector>
 
-std::pair<Tensor, Tensor> get_random_device_host_tensor(const std::vector<size_t> &shape) {
+std::pair<Tensor, Tensor> get_random_device_host_tensor(const std::vector<size_t> &shape, float ratio) {
     Tensor device_tensor(shape, DeviceType::DEVICE);    
     Tensor host_tensor(shape, DeviceType::HOST);
     size_t total_size = 1;
     for (size_t dim : shape) {
         total_size *= dim;
     }
-    launch_randn_kernel(device_tensor.data(), total_size);
+    launch_randn_kernel(device_tensor.data(), total_size, ratio);
     host_tensor.copy_from(device_tensor);
     return std::make_pair(device_tensor, host_tensor);
 }
@@ -82,10 +84,7 @@ Tensor host_matrix_multiply(const Tensor& inp1, const Tensor& inp2) {
 Tensor softmax(const Tensor &inp) {
     Tensor result(inp.shape());
     int cols = inp.shape()[inp.shape().size() - 1];
-    int total_size = 1;
-    for (int dim : inp.shape()) {
-        total_size *= dim;
-    }
+    int total_size = inp.get_total_size();
     int rows = total_size / cols;
     for (int y = 0; y < rows; ++y) {
         float maxval = -std::numeric_limits<float>::infinity();
@@ -101,4 +100,10 @@ Tensor softmax(const Tensor &inp) {
         }
     }
     return result;
+}
+
+void print_host(const float *data, int size) {
+    for (int i = 0; i < size; ++i) {
+        printf("printing host: %d = %f\n", i, data[i]);
+    }
 }

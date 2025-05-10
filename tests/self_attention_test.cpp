@@ -81,8 +81,9 @@ TEST(SelfAttentionTest, SelfAttentionTest) {
     size_t n_sequence = 100;
     size_t in_dim = 100;
     size_t out_dim = 200;
+    // need to have this ratio, otherwise the number might explode
     auto wk_wq_wv_device_host = get_random_device_host_tensor({
-        in_dim, out_dim * 3});
+        in_dim, out_dim * 3}, 0.1);
     auto inp_device_host = get_random_device_host_tensor({
         n_batch, n_sequence, in_dim});
     Tensor self_attention_device_tensor = self_attention(inp_device_host.first, wk_wq_wv_device_host.first);

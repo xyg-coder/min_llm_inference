@@ -1,8 +1,10 @@
 #include "tensor.h"
 #include <cassert>
+#include <iostream>
 #include "kernels/gemm.h"
 #include "kernels/softmax.h"
 #include "utils.h"
+#include "kernels/utils.cuh"
 
 
 /**
@@ -115,7 +117,7 @@ Tensor self_attention(const Tensor& inp, const Tensor& wk_wq_wv) {
     Tensor KQV({n_batch, n_sequence, output_dims_3}, DeviceType::DEVICE);
     launch_gemm_bias_kernel(
         inp.data(), Stride3D({n_sequence * input_dims, input_dims, 1}),
-        KQV.data(), Stride3D({0, output_dims_3, 1}),
+        wk_wq_wv.data(), Stride3D({0, output_dims_3, 1}),
         nullptr, Stride3D(), 
         KQV.data(), Stride3D({n_sequence * output_dims_3, output_dims_3, 1}),
         n_batch, n_sequence, input_dims, output_dims_3);
