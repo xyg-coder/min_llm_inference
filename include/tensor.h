@@ -23,6 +23,7 @@ public:
     float* data();
     void copy_from(const Tensor& other);
     const float* data() const;
+    size_t get_total_size() const;
 
 private:
     std::vector<size_t> shape_;

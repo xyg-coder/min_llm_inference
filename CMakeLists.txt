@@ -54,37 +54,38 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-# Have to split into single tests, otherwise malloc allocation might fail
-add_executable(gemm_test
-    ${TESTS_DIR}/gemm_test.cpp
+# Discover all test cpp files (e.g., *_test.cpp only)
+add_library(test_utils STATIC ${TESTS_DIR}/test_utils.cpp)
+
+target_include_directories(test_utils
+    PUBLIC 
+    ${TESTS_DIR}/include
+    ${INCLUDE_DIR}
+    ${CUDAToolkit_INCLUDE_DIRS}
 )
 
-add_executable(feed_forward_test
-    ${TESTS_DIR}/feed_forward_layer_test.cpp
+target_link_libraries(test_utils
+    PUBLIC gtest_main
 )
 
-add_executable(softmax_test
-    ${TESTS_DIR}/softmax_test.cpp
-)
+file(GLOB TEST_SOURCES "${TESTS_DIR}/*_test.cpp")
 
-# Link libraries
-target_link_libraries(gemm_test
-    min_llm_inference
-    gtest_main
-)
+foreach(TEST_SRC ${TEST_SOURCES})
+    # extract just the filename without extension (e.g. feed_forward_test)
+    get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
 
-target_link_libraries(feed_forward_test
-    min_llm_inference
-    gtest_main
-)
+    add_executable(${TEST_NAME} ${TEST_SRC})
 
-target_link_libraries(softmax_test
-    min_llm_inference
-    gtest_main
-)
+    target_link_libraries(${TEST_NAME}
+        min_llm_inference
+        gtest_main
+        test_utils
+    )
 
-# Enable testing
+    # Add tests/include directory as *PRIVATE* to each test target
+    target_include_directories(${TEST_NAME} PRIVATE ${TESTS_DIR}/include)
+
+    add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+endforeach()
+
 enable_testing()
-add_test(NAME gemm_test COMMAND gemm_test)
-add_test(NAME feed_forward_test COMMAND feed_forward_test)
-add_test(NAME softmax_test COMMAND softmax_test)

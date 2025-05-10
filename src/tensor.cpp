@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 
+// TODO: this deleter can be in another stream
 struct Deleter {
     DeviceType device;
     void operator()(void* p) const {
@@ -62,4 +63,12 @@ float* Tensor::data() {
 
 const float* Tensor::data() const {
     return reinterpret_cast<const float*>(data_.get());
+}
+
+size_t Tensor::get_total_size() const {
+    size_t result = 1;
+    for (size_t dim : shape_) {
+        result *= dim;
+    }
+    return result;
 }
