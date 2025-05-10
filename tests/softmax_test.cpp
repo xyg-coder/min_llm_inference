@@ -78,7 +78,6 @@ TEST(SoftmaxTest, SoftMaxInPlaceTest) {
     }
 
 
-
     // Call the kernel launcher
     launch_softmax_in_place_kernel(input_d.data(), N, T);
 

@@ -1,7 +1,9 @@
 #include "test_utils.h"
 #include "kernels/rand_assign.h"
 #include "tensor.h"
+#include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstddef>
 #include <utility>
 #include <gtest/gtest.h>
@@ -75,4 +77,28 @@ Tensor host_matrix_multiply(const Tensor& inp1, const Tensor& inp2) {
         }
         return result_tensor;
     }
+}
+
+Tensor softmax(const Tensor &inp) {
+    Tensor result(inp.shape());
+    int cols = inp.shape()[inp.shape().size() - 1];
+    int total_size = 1;
+    for (int dim : inp.shape()) {
+        total_size *= dim;
+    }
+    int rows = total_size / cols;
+    for (int y = 0; y < rows; ++y) {
+        float maxval = -std::numeric_limits<float>::infinity();
+        for (int x = 0; x < cols; ++x) {
+            maxval = std::max(maxval, inp.data()[y * cols + x]);
+        }
+        float sum = 0;
+        for (int x = 0; x < cols; ++x) {
+            sum += std::exp(inp.data()[y * cols + x] - maxval);
+        }
+        for (int x = 0; x < cols; ++x) {
+            result.data()[y * cols + x] = std::exp(inp.data()[y * cols + x] - maxval) / sum;
+        }
+    }
+    return result;
 }
