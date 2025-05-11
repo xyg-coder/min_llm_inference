@@ -10,21 +10,37 @@ enum class DeviceType {
     DEVICE
 };
 
+enum class TensorDataType {
+    SYNC,
+    ASYNC
+};
+
+constexpr TensorDataType DEFAULT_TENSOR_DATA_TYPE = TensorDataType::SYNC;
 
 class TensorData {
 public:
     TensorData(size_t size, DeviceType device);
     TensorData(const TensorData&) = delete;
     TensorData& operator=(const TensorData&) = delete;
-    void copy_from(const TensorData&);
-    float* data();
-    const float* data() const;
-    ~TensorData();
-private:
+    virtual void copy_from(const TensorData&) = 0;
+    virtual float* data() = 0;
+    virtual const float* data() const = 0;
+    virtual ~TensorData();
+protected:
     float* data_;
     size_t size_;
-    mutable bool is_ready;
     DeviceType device_;
+};
+
+class AsyncTensorData : public TensorData {
+public:
+    AsyncTensorData(size_t size, DeviceType device);
+    virtual void copy_from(const TensorData&) override;
+    virtual float* data() override;
+    virtual const float* data() const override;
+    ~AsyncTensorData() override;
+private:
+    mutable bool is_ready;
     cudaEvent_t latest_event;
     mutable cudaEvent_t last_event_ = nullptr;
     void wait_for_data_readiness() const;
@@ -32,9 +48,18 @@ private:
     void record_event() const;
 };
 
+class SyncTensorData : public TensorData {
+public:
+    SyncTensorData(size_t size, DeviceType device);
+    virtual void copy_from(const TensorData&) override;
+    virtual float* data() override;
+    virtual const float* data() const override;
+    ~SyncTensorData() override;
+};
+
 class Tensor {
 public:
-    Tensor(const std::vector<size_t>& shape, DeviceType device = DeviceType::HOST);
+    Tensor(const std::vector<size_t>& shape, DeviceType device = DeviceType::HOST, TensorDataType tensor_data_type = DEFAULT_TENSOR_DATA_TYPE);
     Tensor(const Tensor&) = default;
     Tensor& operator=(const Tensor&) = default;
     ~Tensor() = default;
