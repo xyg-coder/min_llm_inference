@@ -6,7 +6,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
-#include <iostream>
 #include <utility>
 #include <gtest/gtest.h>
 #include <vector>
@@ -31,8 +30,10 @@ void assert_near(const Tensor &tensor_device, const Tensor &tensor_host, float t
     }
     Tensor copy_from_device(tensor_device.shape(), DeviceType::HOST);
     copy_from_device.copy_from(tensor_device);
+    const float* copy_from_device_ptr = copy_from_device.data();
+    const float* host_tensor_ptr = tensor_host.data();
     for (size_t i = 0; i < total_size; ++i) {
-        ASSERT_NEAR(copy_from_device.data()[i], tensor_host.data()[i], threshold)
+        ASSERT_NEAR(copy_from_device_ptr[i], host_tensor_ptr[i], threshold)
             << "Mismatch at (" << i <<  ")";
     }
 }
@@ -50,14 +51,17 @@ Tensor host_matrix_multiply(const Tensor& inp1, const Tensor& inp2) {
         assert(shape2[1] == N);
         size_t cols = shape2[2];
         Tensor result_tensor({n_batch, rows, cols}, DeviceType::HOST);
+        const float* inp1_ptr = inp1.data();
+        const float* inp2_ptr = inp2.data();
+        float* result_ptr = result_tensor.data();
         for (int i = 0; i < n_batch; ++i) {
             for (int j = 0; j < rows; ++j) {
                 for (int k = 0; k < cols; ++k) {
                     float result = 0;
                     for (int n = 0; n < N; ++n) {
-                        result += (inp1.data()[i * rows * N + j * N + n] * inp2.data()[i * N * cols + n * cols + k]);
+                        result += (inp1_ptr[i * rows * N + j * N + n] * inp2_ptr[i * N * cols + n * cols + k]);
                     }
-                    result_tensor.data()[i * rows * cols + j * cols + k] = result;
+                    result_ptr[i * rows * cols + j * cols + k] = result;
                 }
             }
         }
@@ -68,13 +72,16 @@ Tensor host_matrix_multiply(const Tensor& inp1, const Tensor& inp2) {
         assert(shape2[0] == N);
         size_t cols = shape2[1];
         Tensor result_tensor({rows, cols}, DeviceType::HOST);
+        const float* inp1_ptr = inp1.data();
+        const float* inp2_ptr = inp2.data();
+        float* result_ptr = result_tensor.data();
         for (int i = 0; i < rows; ++i) {
             for (int j = 0; j < cols; ++j) {
                 float result = 0;
                 for (int n = 0; n < N; ++n) {
-                    result += (inp1.data()[i * N + n] * inp2.data()[n * cols + j]);
+                    result += (inp1_ptr[i * N + n] * inp2_ptr[n * cols + j]);
                 }
-                result_tensor.data()[i * cols + j] = result;
+                result_ptr[i * cols + j] = result;
             }
         }
         return result_tensor;
@@ -86,17 +93,19 @@ Tensor softmax(const Tensor &inp) {
     int cols = inp.shape()[inp.shape().size() - 1];
     int total_size = inp.get_total_size();
     int rows = total_size / cols;
+    const float* inp_ptr = inp.data();
+    float* result_ptr = result.data();
     for (int y = 0; y < rows; ++y) {
         float maxval = -std::numeric_limits<float>::infinity();
         for (int x = 0; x < cols; ++x) {
-            maxval = std::max(maxval, inp.data()[y * cols + x]);
+            maxval = std::max(maxval, inp_ptr[y * cols + x]);
         }
         float sum = 0;
         for (int x = 0; x < cols; ++x) {
-            sum += std::exp(inp.data()[y * cols + x] - maxval);
+            sum += std::exp(inp_ptr[y * cols + x] - maxval);
         }
         for (int x = 0; x < cols; ++x) {
-            result.data()[y * cols + x] = std::exp(inp.data()[y * cols + x] - maxval) / sum;
+            result_ptr[y * cols + x] = std::exp(inp_ptr[y * cols + x] - maxval) / sum;
         }
     }
     return result;

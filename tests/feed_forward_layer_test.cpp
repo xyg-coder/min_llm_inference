@@ -30,13 +30,16 @@ TEST(FeedForwardLayerTest, FeedForwardTest) {
     const Tensor& output_d = std::get<Tensor>(output_tensor);
     output.copy_from(output_d);
     float* output_data = output.data();
+    float* input_host_data = inputs_host.data();
+    float* weight_host_data = weights_host.data();
+    float* bias_host_data = bias_host.data();
     for (size_t i = 0; i < batch_size; ++i) {
         for (size_t j = 0; j < out_features; ++j) {
             float expected = 0;
             for (size_t k = 0; k < in_features; ++k) {
-                expected += inputs_host.data()[i * in_features + k] * weights_host.data()[k * out_features + j];
+                expected += input_host_data[i * in_features + k] * weight_host_data[k * out_features + j];
             }
-            expected += bias_host.data()[j];
+            expected += bias_host_data[j];
             ASSERT_NEAR(output_data[i * out_features + j], expected, 1e-3) << "Mismatch at (" << i << ", " << j << ")";
         }
     }
@@ -66,12 +69,14 @@ TEST(FeedForwardLayerTest, FeedForwardNoBiasTest) {
     Tensor output({batch_size, out_features}, DeviceType::HOST);
     const Tensor& output_d = std::get<Tensor>(output_tensor);
     output.copy_from(output_d);
+    float* input_host_data = inputs_host.data();
+    float* weight_host_data = weights_host.data();
     float* output_data = output.data();
     for (size_t i = 0; i < batch_size; ++i) {
         for (size_t j = 0; j < out_features; ++j) {
             float expected = 0;
             for (size_t k = 0; k < in_features; ++k) {
-                expected += inputs_host.data()[i * in_features + k] * weights_host.data()[k * out_features + j];
+                expected += input_host_data[i * in_features + k] * weight_host_data[k * out_features + j];
             }
             ASSERT_NEAR(output_data[i * out_features + j], expected, 1e-3) << "Mismatch at (" << i << ", " << j << ")";
         }

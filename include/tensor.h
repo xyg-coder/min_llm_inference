@@ -32,6 +32,31 @@ protected:
     DeviceType device_;
 };
 
+///////////////////////////////////////////////////////////////////////////
+// For now, the 2 implementations don't show much difference:
+// sync
+// Test project /root/min_llm_inference/build
+//     Start 1: feed_forward_layer_test
+// 1/4 Test #1: feed_forward_layer_test ..........   Passed    8.78 sec
+//     Start 2: gemm_test
+// 2/4 Test #2: gemm_test ........................   Passed    2.06 sec
+//     Start 3: self_attention_test
+// 3/4 Test #3: self_attention_test ..............   Passed    1.08 sec
+//     Start 4: softmax_test
+// 4/4 Test #4: softmax_test .....................   Passed   11.54 sec
+// 
+// 
+// async
+// 1/4 Test #1: feed_forward_layer_test ..........   Passed    8.71 sec
+//     Start 2: gemm_test
+// 2/4 Test #2: gemm_test ........................   Passed    2.08 sec
+//     Start 3: self_attention_test
+// 3/4 Test #3: self_attention_test ..............   Passed    1.08 sec
+//     Start 4: softmax_test
+// 4/4 Test #4: softmax_test .....................   Passed   12.82 sec
+// Assuming future with more complicated calculations, we can see more value from async version.
+//////////////////////////////////////////////////////////////////////////
+
 class AsyncTensorData : public TensorData {
 public:
     AsyncTensorData(size_t size, DeviceType device);
@@ -66,6 +91,9 @@ public:
 
     const std::vector<size_t>& shape() const;
     DeviceType device() const;
+    // WARNING: avoid keep calling the data() inside loop. Instead, save the float* from data() once
+    // We are seeing obvoius slow down when keep calling data in large for-loop
+    // Especially when the data() involves virtual table search (different implementations of TensorData)
     float* data();
     const float* data() const;
     void copy_from(const Tensor& other);

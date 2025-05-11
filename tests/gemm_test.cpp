@@ -1,6 +1,5 @@
 #include <cstdio>
 #include <gtest/gtest.h>
-#include <random>
 #include "tensor.h"
 #include "kernels/gemm.h"
 #include "test_utils.h"
