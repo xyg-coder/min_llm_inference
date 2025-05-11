@@ -17,13 +17,16 @@ Tensor get_kqt_host(const Tensor& kqv) {
 
     Tensor k_host({n_batch, n_sequence, dim}, DeviceType::HOST);
     Tensor qt_host({n_batch, dim, n_sequence}, DeviceType::HOST);
+    float* k_host_ptr = k_host.data();
+    const float* kqv_ptr = kqv.data();
+    float* qt_host_ptr = qt_host.data();
     for (int i = 0; i < n_batch; ++i) {
         for (int j = 0; j < n_sequence; ++j) {
             for (int k = 0; k < dim; ++k) {
-                k_host.data()[i * n_sequence * dim + j * dim + k] = kqv.data()[
+                k_host_ptr[i * n_sequence * dim + j * dim + k] = kqv_ptr[
                     i * n_sequence * dims_3 + j * dims_3 + k] / std::sqrt(dim);
                 // qt[i][k][j] = kqv[i][j][dim + k]
-                qt_host.data()[i * n_sequence * dim + k * n_sequence + j] = kqv.data()[
+                qt_host_ptr[i * n_sequence * dim + k * n_sequence + j] = kqv_ptr[
                     i * n_sequence * dims_3 + j * dims_3 + dim + k];
             }
         }
@@ -49,8 +52,10 @@ Tensor duplicate_batch(const Tensor& inp, int n_batch) {
     size_t rows = inp.shape()[0];
     size_t cols = inp.shape()[1];
     Tensor duplicated({(size_t)n_batch, rows, cols}, DeviceType::HOST);
+    const float* inp_ptr = inp.data();
+    float* duplicated_ptr = duplicated.data();
     for (int i = 0; i < n_batch; ++i) {
-        std::copy(inp.data(), inp.data() + rows * cols, duplicated.data() + i * rows * cols);
+        std::copy(inp_ptr, inp_ptr + rows * cols, duplicated_ptr + i * rows * cols);
     }
     return duplicated;
 }
@@ -60,8 +65,10 @@ Tensor get_batched_v(const Tensor& kqv) {
     Tensor result({kqv.shape()[0], kqv.shape()[1], kqv.shape()[2] / 3}, DeviceType::HOST);
     int n_rows = kqv.shape()[0] * kqv.shape()[1];
     int cols = kqv.shape()[2] / 3;
+    const float* kqv_ptr = kqv.data();
+    float* result_ptr = result.data();
     for (int i = 0; i < n_rows; ++i) {
-        std::copy(kqv.data() + i * cols * 3 + cols * 2, kqv.data() + i * cols * 3 + cols * 3, result.data() + i * cols);
+        std::copy(kqv_ptr + i * cols * 3 + cols * 2, kqv_ptr + i * cols * 3 + cols * 3, result_ptr + i * cols);
     }
     return result;
 }

@@ -85,8 +85,9 @@ TEST(SoftmaxTest, SoftMaxInPlaceTest) {
 
 
     // Check results
+    const float* input_h_ptr = input_h.data();
     for (int i = 0; i < N * T; ++i) {
-        ASSERT_NEAR(input_h.data()[i], output_data[i], 1e-4f);
+        ASSERT_NEAR(input_h_ptr[i], output_data[i], 1e-4f);
     }
 }
 
@@ -130,7 +131,8 @@ TEST(SoftmaxTest, SoftMaxLargeTest) {
 
 
     // Check results
+    const float* output_copy_h_ptr = output_copy_h.data();
     for (int i = 0; i < CPU_N * T; ++i) {
-        ASSERT_NEAR(output_copy_h.data()[i], output_data[i], 1e-4f);
+        ASSERT_NEAR(output_copy_h_ptr[i], output_data[i], 1e-4f);
     }
 }

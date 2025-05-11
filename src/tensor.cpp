@@ -1,52 +1,35 @@
 #include "tensor.h"
-#include <iostream>
+#include "utils.h"
+#include <memory>
+#include <stdexcept>
 #include <vector>
 
-// TODO: this deleter can be in another stream
-struct Deleter {
-    DeviceType device;
-    void operator()(void* p) const {
-        if (!p) return;
-        if (device == DeviceType::HOST) delete[] reinterpret_cast<float*>(p);
-        else cudaFree(p);
-    }
-};
 
-Tensor::Tensor(const std::vector<size_t>& shape, DeviceType device): shape_(shape), device_(device) {
+// This stream is leaked. Should be fine
+cudaStream_t& tensor_creation_free_cuda_stream() {
+    static cudaStream_t s = []() {
+        cudaStream_t stream;
+        cudaStreamCreate(&stream);
+        return stream;
+    }();
+    return s;
+}
+
+
+Tensor::Tensor(const std::vector<size_t>& shape, DeviceType device, TensorDataType tensor_data_type): shape_(shape), device_(device) {
     size_ = 1;
     for (auto d : shape_) {
         size_ *= d;
     }
-    void* ptr;
-    if (device_ == DeviceType::HOST) {
-        ptr = (void*)new float[size_];
+    if (tensor_data_type == TensorDataType::SYNC) {
+        data_ = std::make_shared<SyncTensorData>(size_, device);
     } else {
-        cudaError_t err = cudaMalloc(&ptr, sizeof(float) * size_);
-        if (err != cudaSuccess) {
-            std::cerr << "CudaMalloc failure: " << cudaGetErrorString(err)
-                << ", trying to allocate " << sizeof(float) * size_ << std::endl;
-            throw std::runtime_error("cudaMalloc failed!");
-        }
+        data_ = std::make_shared<AsyncTensorData>(size_, device);
     }
-    data_ = std::shared_ptr<void>(ptr, Deleter{device});
 }
 
 void Tensor::copy_from(const Tensor& other) {
-    if (other.size_ != size_ || other.device_ == device_)
-        throw std::runtime_error("Copy from: shape or device mismatch, and we only support copy from different devices");
-
-    cudaError err;
-    if (device_ == DeviceType::HOST && other.device_ == DeviceType::DEVICE) {
-        err = cudaMemcpy(data(), other.data(), size_ * sizeof(float), cudaMemcpyDeviceToHost);
-    } else if (device_ == DeviceType::DEVICE && other.device_ == DeviceType::HOST) {
-        err = cudaMemcpy(data(), other.data(), size_ * sizeof(float), cudaMemcpyHostToDevice);
-    } else {
-        throw std::runtime_error("Unsupported copy direction");
-    }
-
-    if (err != cudaSuccess) {
-        std::cerr << "Memory copy error: " << cudaGetErrorString(err) << std::endl;
-    }
+    data_->copy_from(*other.data_.get());
 }
 
 const std::vector<size_t>& Tensor::shape() const {
@@ -58,17 +41,131 @@ DeviceType Tensor::device() const {
 }
 
 float* Tensor::data() {
-    return reinterpret_cast<float*>(data_.get());
+    return data_->data();
 }
 
 const float* Tensor::data() const {
-    return reinterpret_cast<const float*>(data_.get());
+    return data_->data();
 }
 
 size_t Tensor::get_total_size() const {
-    size_t result = 1;
-    for (size_t dim : shape_) {
-        result *= dim;
+    return size_;
+}
+
+TensorData::TensorData(size_t size, DeviceType device): size_(size), device_(device) {}
+
+TensorData::~TensorData() {}
+
+AsyncTensorData::AsyncTensorData(size_t size, DeviceType device): TensorData(size, device) {
+    if (device == DeviceType::HOST) {
+        is_ready = true;
+        cudaHostAlloc(&data_, size_ * sizeof(float), cudaHostAllocDefault);
+    } else {
+        cudaMallocAsync(&data_, sizeof(float) * size, tensor_creation_free_cuda_stream());
+        CUDA_CHECK_LAST();
+        is_ready = false;
+        record_event();
     }
-    return result;
+}
+
+AsyncTensorData::~AsyncTensorData() {
+    if (device_ == DeviceType::HOST) {
+        wait_for_data_readiness();
+        cudaFreeHost(data_);
+    } else {
+        cudaFreeAsync(data_, tensor_creation_free_cuda_stream());
+    }
+    CUDA_CHECK_LAST();
+    destroy_last_event();
+}
+
+void AsyncTensorData::copy_from(const TensorData& other) {
+    const AsyncTensorData& async_other = *dynamic_cast<const AsyncTensorData*>(&other);
+    if (async_other.size_ != size_ || async_other.device_ == device_) {
+        throw std::runtime_error("Copy from: shape or device mismatch, and we only support copy from different devices");
+    }
+
+    // copy from DEVICE to HOST
+    if (device_ == DeviceType::HOST) {
+        cudaMemcpyAsync(data(), async_other.data(), size_ * sizeof(float), cudaMemcpyDeviceToHost, tensor_creation_free_cuda_stream());
+    } else {    // copy from HOST to DEVICE
+        cudaMemcpyAsync(data(), async_other.data(), size_ * sizeof(float), cudaMemcpyHostToDevice, tensor_creation_free_cuda_stream());
+    }
+    is_ready = false;
+    CUDA_CHECK_LAST();
+    record_event();
+}
+
+float* AsyncTensorData::data() {
+    wait_for_data_readiness();
+    return data_;
+}
+
+const float* AsyncTensorData::data() const {
+    wait_for_data_readiness();
+    return data_;
+}
+
+void AsyncTensorData::wait_for_data_readiness() const {
+    if (is_ready) {
+        return;
+    }
+    is_ready = true;
+    if (last_event_) {
+        cudaEventSynchronize(last_event_);
+    }
+}
+
+void AsyncTensorData::destroy_last_event() const {
+    if (last_event_) {
+        cudaEventDestroy(last_event_);
+        last_event_ = nullptr;
+    }
+}
+
+void AsyncTensorData::record_event() const {
+    destroy_last_event();
+    cudaEventCreateWithFlags(&last_event_, cudaEventDisableTiming);
+    cudaEventRecord(last_event_, tensor_creation_free_cuda_stream());
+}
+
+
+SyncTensorData::SyncTensorData(size_t size, DeviceType device): TensorData(size, device) {
+    if (device == DeviceType::HOST) {
+        data_ = new float[size_];
+    } else {
+        cudaMalloc(&data_, sizeof(float) * size_);
+        CUDA_CHECK_LAST();
+    }
+}
+
+void SyncTensorData::copy_from(const TensorData& other) {
+    const SyncTensorData& sync_other = *dynamic_cast<const SyncTensorData*>(&other);
+
+    if (sync_other.size_ != size_ || sync_other.device_ == device_)
+        throw std::runtime_error("Copy from: shape or device mismatch, and we only support copy from different devices");
+
+    cudaError err;
+    if (device_ == DeviceType::HOST) {
+        cudaMemcpy(data(), other.data(), size_ * sizeof(float), cudaMemcpyDeviceToHost);
+    } else {
+        cudaMemcpy(data(), other.data(), size_ * sizeof(float), cudaMemcpyHostToDevice);
+    }
+    CUDA_CHECK_LAST();
+}
+
+float* SyncTensorData::data() {
+    return data_;
+}
+
+const float* SyncTensorData::data() const {
+    return data_;
+}
+
+SyncTensorData::~SyncTensorData() {
+    if (device_ == DeviceType::HOST) {
+        delete[] data_;
+    } else {
+        cudaFree(data_);
+    }
 }
