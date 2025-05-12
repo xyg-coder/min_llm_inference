@@ -2,20 +2,20 @@
 #include <gtest/gtest.h>
 #include "kernels/rand_assign.h"
 #include "kernels/softmax.h"
-#include "tensor.h"
+#include "tensor.hpp"
 #include <cuda_runtime.h>
 
 TEST(SoftmaxTest, SoftMaxTest) {
     constexpr int N = 8, T = 1024;
-    Tensor input_h({N, T, T}, DeviceType::HOST);
-    Tensor input_d({N, T, T}, DeviceType::DEVICE);
+    TensorFloat input_h({N, T, T}, DeviceType::HOST);
+    TensorFloat input_d({N, T, T}, DeviceType::DEVICE);
 
     launch_randn_kernel(input_d.data(), N * T * T);
     input_h.copy_from(input_d);
     float* input_data = input_h.data();
     
 
-    Tensor output_h({N, T, T}, DeviceType::HOST);
+    TensorFloat output_h({N, T, T}, DeviceType::HOST);
     float* output_data = output_h.data();
 
     // Compute expected softmax results on CPU for each row
@@ -34,12 +34,12 @@ TEST(SoftmaxTest, SoftMaxTest) {
     }
 
 
-    Tensor output_d({N, T, T}, DeviceType::DEVICE);
+    TensorFloat output_d({N, T, T}, DeviceType::DEVICE);
 
     // Call the kernel launcher
     launch_softmax_kernel(input_d.data(), output_d.data(), N, T);
 
-    Tensor output_copy_h({N, T, T}, DeviceType::HOST);
+    TensorFloat output_copy_h({N, T, T}, DeviceType::HOST);
     output_copy_h.copy_from(output_d);
 
 
@@ -51,15 +51,15 @@ TEST(SoftmaxTest, SoftMaxTest) {
 
 TEST(SoftmaxTest, SoftMaxInPlaceTest) {
     constexpr int N = 8, T = 1024;
-    Tensor input_h({N, T, T}, DeviceType::HOST);
-    Tensor input_d({N, T, T}, DeviceType::DEVICE);
+    TensorFloat input_h({N, T, T}, DeviceType::HOST);
+    TensorFloat input_d({N, T, T}, DeviceType::DEVICE);
 
     launch_randn_kernel(input_d.data(), N * T * T);
     input_h.copy_from(input_d);
     float* input_data = input_h.data();
     
 
-    Tensor output_h({N, T, T}, DeviceType::HOST);
+    TensorFloat output_h({N, T, T}, DeviceType::HOST);
     float* output_data = output_h.data();
 
     // Compute expected softmax results on CPU for each row
@@ -94,14 +94,14 @@ TEST(SoftmaxTest, SoftMaxInPlaceTest) {
 // Just to test that the cuda can run large scale softmax
 TEST(SoftmaxTest, SoftMaxLargeTest) {
     constexpr int N = 800, T = 1024;
-    Tensor input_h({N, T, T}, DeviceType::HOST);
-    Tensor input_d({N, T, T}, DeviceType::DEVICE);
+    TensorFloat input_h({N, T, T}, DeviceType::HOST);
+    TensorFloat input_d({N, T, T}, DeviceType::DEVICE);
 
     launch_randn_kernel(input_d.data(), N * T * T);
 
     input_h.copy_from(input_d);
 
-    Tensor output_h({N, T, T}, DeviceType::HOST);
+    TensorFloat output_h({N, T, T}, DeviceType::HOST);
     float* output_data = output_h.data();
 
     const int CPU_N = 20;
@@ -121,12 +121,12 @@ TEST(SoftmaxTest, SoftMaxLargeTest) {
         }
     }
 
-    Tensor output_d({N, T, T}, DeviceType::DEVICE);
+    TensorFloat output_d({N, T, T}, DeviceType::DEVICE);
 
     // Call the kernel launcher
     launch_softmax_kernel(input_d.data(), output_d.data(), N, T);
 
-    Tensor output_copy_h({N, T, T}, DeviceType::HOST);
+    TensorFloat output_copy_h({N, T, T}, DeviceType::HOST);
     output_copy_h.copy_from(output_d);
 
 

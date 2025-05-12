@@ -1,6 +1,6 @@
 #include <cstdio>
 #include <gtest/gtest.h>
-#include "tensor.h"
+#include "tensor.hpp"
 #include "kernels/gemm.h"
 #include "test_utils.h"
 
@@ -16,11 +16,11 @@ TEST(GemmKernelTest, MatrixMultiplication) {
     auto s2_device_host = get_random_device_host_tensor({
         batch_size, N, cols});
 
-    Tensor d_output({batch_size, rows, cols}, DeviceType::DEVICE);
+    TensorFloat d_output({batch_size, rows, cols}, DeviceType::DEVICE);
     // Launch the kernel
     launch_gemm_kernel(s1_device_host.first.data(), s2_device_host.first.data(), d_output.data(), batch_size, rows, N, cols);
 
-    Tensor h_output = host_matrix_multiply(s1_device_host.second, s2_device_host.second);
+    TensorFloat h_output = host_matrix_multiply(s1_device_host.second, s2_device_host.second);
 
     assert_near(d_output, h_output);
 }
@@ -37,11 +37,11 @@ TEST(GemmKernelTest, MultiBatchesMatrixMultiplication) {
     auto s2_device_host = get_random_device_host_tensor({
         batch_size, N, cols});
 
-    Tensor d_output({batch_size, rows, cols}, DeviceType::DEVICE);
+    TensorFloat d_output({batch_size, rows, cols}, DeviceType::DEVICE);
     // Launch the kernel
     launch_gemm_kernel(s1_device_host.first.data(), s2_device_host.first.data(), d_output.data(), batch_size, rows, N, cols);
 
-    Tensor h_output = host_matrix_multiply(s1_device_host.second, s2_device_host.second);
+    TensorFloat h_output = host_matrix_multiply(s1_device_host.second, s2_device_host.second);
 
     assert_near(d_output, h_output);
 }
@@ -60,7 +60,7 @@ TEST(GemmKernelTest, MultiBatchesBiasMatrixMultiplication) {
     auto bias_device_host = get_random_device_host_tensor({
         batch_size, rows, cols});
 
-    Tensor d_output({batch_size, rows, cols}, DeviceType::DEVICE);
+    TensorFloat d_output({batch_size, rows, cols}, DeviceType::DEVICE);
 
     // Launch the kernel
     launch_gemm_bias_kernel(
@@ -70,7 +70,7 @@ TEST(GemmKernelTest, MultiBatchesBiasMatrixMultiplication) {
         d_output.data(), Stride3D{rows * cols, cols, 1},
         batch_size, rows, N, cols);
 
-    Tensor h_output({batch_size, rows, cols}, DeviceType::HOST);
+    TensorFloat h_output({batch_size, rows, cols}, DeviceType::HOST);
 
     // Copy the result back to the host
     h_output.copy_from(d_output);
@@ -109,7 +109,7 @@ TEST(GemmKernelTest, MultiBatchesBiasWithStrideMatrixMultiplication) {
     auto bias_device_host = get_random_device_host_tensor({
         cols});
 
-    Tensor d_output({batch_size, rows, cols}, DeviceType::DEVICE);
+    TensorFloat d_output({batch_size, rows, cols}, DeviceType::DEVICE);
 
     // Launch the kernel
     launch_gemm_bias_kernel(
@@ -119,7 +119,7 @@ TEST(GemmKernelTest, MultiBatchesBiasWithStrideMatrixMultiplication) {
         d_output.data(), Stride3D{rows * cols, cols, 1},
         batch_size, rows, N, cols);
 
-    Tensor h_output({batch_size, rows, cols}, DeviceType::HOST);
+    TensorFloat h_output({batch_size, rows, cols}, DeviceType::HOST);
 
     // Copy the result back to the host
     h_output.copy_from(d_output);
