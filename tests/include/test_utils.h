@@ -2,7 +2,6 @@
 #pragma once
 
 #include "tensor.h"
-#include "kernels/gemm.h"
 #include <utility>
 #include <vector>
 

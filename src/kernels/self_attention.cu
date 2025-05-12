@@ -1,10 +1,8 @@
 #include "tensor.h"
 #include <cassert>
-#include <iostream>
 #include "kernels/gemm.h"
 #include "kernels/softmax.h"
 #include "utils.h"
-#include "kernels/utils.cuh"
 
 
 /**
