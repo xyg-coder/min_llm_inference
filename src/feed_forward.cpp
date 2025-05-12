@@ -1,9 +1,9 @@
+#include "tensor.hpp"
 #include "feed_forward.h"
 #include <stdexcept>
 #include "kernels/gemm.h"
 
-
-FeedForward::FeedForward(const Tensor& w, std::optional<const Tensor> b): weight_(w), bias_(std::move(b)) {
+FeedForward::FeedForward(const TensorFloat& w, std::optional<const TensorFloat> b): weight_(w), bias_(std::move(b)) {
     auto weight_shape = weight_.shape();
     if (weight_shape.size() != 2) {
         throw std::invalid_argument("[FeedForward] Weight must be 2D (got shape size " +
@@ -27,16 +27,16 @@ FeedForward::FeedForward(const Tensor& w, std::optional<const Tensor> b): weight
 }
 
 ModelIO FeedForward::forward(const ModelIO& input) {
-    if (!std::holds_alternative<Tensor>(input)) {
+    if (!std::holds_alternative<TensorFloat>(input)) {
         throw std::invalid_argument("[FeedForward] Input must be a single Tensor (not a list or dict)");
     }
 
-    const Tensor& input_t = std::get<Tensor>(input);
+    const TensorFloat& input_t = std::get<TensorFloat>(input);
     size_t n_batch = input_t.shape()[0];
     size_t in_features = input_t.shape()[1];
     size_t out_features = weight_.shape()[1];
 
-    Tensor output_tensor({n_batch, out_features}, DeviceType::DEVICE);
+    TensorFloat output_tensor({n_batch, out_features}, DeviceType::DEVICE);
     float* bias_data_ptr = nullptr;
     Stride3D bias_stride({0, 0, 0});
     if (bias_) {

@@ -1,16 +1,16 @@
 #pragma once
-#include "tensor.h"
+#include "tensor.hpp"
 #include <map>
 #include <memory>
 #include <string>
 #include <variant>
 #include <vector>
 
-using TensorList = std::vector<Tensor>;
+using TensorList = std::vector<TensorFloat>;
 
-using TensorDict = std::map<std::string, Tensor>;
+using TensorDict = std::map<std::string, TensorFloat>;
 
-using ModelIO = std::variant<Tensor, TensorDict, TensorList>;
+using ModelIO = std::variant<TensorFloat, TensorDict, TensorList>;
 
 class Layer {
 public:
