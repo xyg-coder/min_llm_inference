@@ -1,4 +1,4 @@
-#include "tensor.h"
+#include "tensor.hpp"
 #include <cassert>
 #include "kernels/gemm.h"
 #include "kernels/softmax.h"
@@ -103,7 +103,7 @@ void launch_softmax_v_kernel(
 }
 
 
-Tensor self_attention(const Tensor& inp, const Tensor& wk_wq_wv) {
+TensorFloat self_attention(const TensorFloat& inp, const TensorFloat& wk_wq_wv) {
     size_t n_batch = inp.shape()[0];
     size_t n_sequence = inp.shape()[1];
     size_t input_dims = inp.shape()[2];
@@ -112,7 +112,7 @@ Tensor self_attention(const Tensor& inp, const Tensor& wk_wq_wv) {
     assert(wk_wq_wv.shape()[0] == input_dims);
     assert(output_dims_3 % 3 == 0);
 
-    Tensor KQV({n_batch, n_sequence, output_dims_3}, DeviceType::DEVICE);
+    TensorFloat KQV({n_batch, n_sequence, output_dims_3}, DeviceType::DEVICE);
     launch_gemm_bias_kernel(
         inp.data(), Stride3D({n_sequence * input_dims, input_dims, 1}),
         wk_wq_wv.data(), Stride3D({0, output_dims_3, 1}),
@@ -120,10 +120,10 @@ Tensor self_attention(const Tensor& inp, const Tensor& wk_wq_wv) {
         KQV.data(), Stride3D({n_sequence * output_dims_3, output_dims_3, 1}),
         n_batch, n_sequence, input_dims, output_dims_3);
     
-    Tensor kqt({n_batch, n_sequence, n_sequence}, DeviceType::DEVICE);
+    TensorFloat kqt({n_batch, n_sequence, n_sequence}, DeviceType::DEVICE);
     launch_kqt_kernel(KQV.data(), kqt.data(), n_batch, n_sequence, output_dims_3 / 3);
     launch_softmax_in_place_kernel(kqt.data(), n_batch, n_sequence);
-    Tensor result({n_batch, n_sequence, output_dims_3 / 3}, DeviceType::DEVICE);
+    TensorFloat result({n_batch, n_sequence, output_dims_3 / 3}, DeviceType::DEVICE);
     launch_softmax_v_kernel(kqt.data(), KQV.data(), result.data(), n_batch, n_sequence, output_dims_3 / 3);
     return result;
 }

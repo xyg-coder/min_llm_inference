@@ -1,6 +1,6 @@
 #include "test_utils.h"
 #include "kernels/rand_assign.h"
-#include "tensor.h"
+#include "tensor.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -10,9 +10,9 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-std::pair<Tensor, Tensor> get_random_device_host_tensor(const std::vector<size_t> &shape, float ratio) {
-    Tensor device_tensor(shape, DeviceType::DEVICE);    
-    Tensor host_tensor(shape, DeviceType::HOST);
+std::pair<TensorFloat, TensorFloat> get_random_device_host_tensor(const std::vector<size_t> &shape, float ratio) {
+    TensorFloat device_tensor(shape, DeviceType::DEVICE);    
+    TensorFloat host_tensor(shape, DeviceType::HOST);
     size_t total_size = 1;
     for (size_t dim : shape) {
         total_size *= dim;
@@ -22,13 +22,13 @@ std::pair<Tensor, Tensor> get_random_device_host_tensor(const std::vector<size_t
     return std::make_pair(device_tensor, host_tensor);
 }
 
-void assert_near(const Tensor &tensor_device, const Tensor &tensor_host, float threshold) {
+void assert_near(const TensorFloat &tensor_device, const TensorFloat &tensor_host, float threshold) {
     size_t total_size = 1;
     for (int i = 0; i < tensor_device.shape().size(); ++i) {
         ASSERT_EQ(tensor_device.shape()[i], tensor_host.shape()[i]);
         total_size *= tensor_device.shape()[i];
     }
-    Tensor copy_from_device(tensor_device.shape(), DeviceType::HOST);
+    TensorFloat copy_from_device(tensor_device.shape(), DeviceType::HOST);
     copy_from_device.copy_from(tensor_device);
     const float* copy_from_device_ptr = copy_from_device.data();
     const float* host_tensor_ptr = tensor_host.data();
@@ -38,7 +38,7 @@ void assert_near(const Tensor &tensor_device, const Tensor &tensor_host, float t
     }
 }
 
-Tensor host_matrix_multiply(const Tensor& inp1, const Tensor& inp2) {
+TensorFloat host_matrix_multiply(const TensorFloat& inp1, const TensorFloat& inp2) {
     const std::vector<size_t>& shape1 = inp1.shape();
     const std::vector<size_t>& shape2 = inp2.shape();
     assert(shape1.size() == shape2.size());
@@ -50,7 +50,7 @@ Tensor host_matrix_multiply(const Tensor& inp1, const Tensor& inp2) {
         assert(shape2[0] == n_batch);
         assert(shape2[1] == N);
         size_t cols = shape2[2];
-        Tensor result_tensor({n_batch, rows, cols}, DeviceType::HOST);
+        TensorFloat result_tensor({n_batch, rows, cols}, DeviceType::HOST);
         const float* inp1_ptr = inp1.data();
         const float* inp2_ptr = inp2.data();
         float* result_ptr = result_tensor.data();
@@ -71,7 +71,7 @@ Tensor host_matrix_multiply(const Tensor& inp1, const Tensor& inp2) {
         size_t N = shape1[1];
         assert(shape2[0] == N);
         size_t cols = shape2[1];
-        Tensor result_tensor({rows, cols}, DeviceType::HOST);
+        TensorFloat result_tensor({rows, cols}, DeviceType::HOST);
         const float* inp1_ptr = inp1.data();
         const float* inp2_ptr = inp2.data();
         float* result_ptr = result_tensor.data();
@@ -88,8 +88,8 @@ Tensor host_matrix_multiply(const Tensor& inp1, const Tensor& inp2) {
     }
 }
 
-Tensor softmax(const Tensor &inp) {
-    Tensor result(inp.shape());
+TensorFloat softmax(const TensorFloat &inp) {
+    TensorFloat result(inp.shape());
     int cols = inp.shape()[inp.shape().size() - 1];
     int total_size = inp.get_total_size();
     int rows = total_size / cols;

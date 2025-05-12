@@ -1,4 +1,4 @@
-#include "tensor.h"
+#include "tensor.hpp"
 #include "test_utils.h"
 #include <algorithm>
 #include <cmath>
@@ -8,15 +8,15 @@
 #include "kernels/self_attention.h"
 
 
-Tensor get_kqt_host(const Tensor& kqv) {
+TensorFloat get_kqt_host(const TensorFloat& kqv) {
     const std::vector<size_t>& shape = kqv.shape();
     size_t n_batch = shape[0];
     size_t n_sequence = shape[1];
     size_t dims_3 = shape[2];
     size_t dim = dims_3 / 3;
 
-    Tensor k_host({n_batch, n_sequence, dim}, DeviceType::HOST);
-    Tensor qt_host({n_batch, dim, n_sequence}, DeviceType::HOST);
+    TensorFloat k_host({n_batch, n_sequence, dim}, DeviceType::HOST);
+    TensorFloat qt_host({n_batch, dim, n_sequence}, DeviceType::HOST);
     float* k_host_ptr = k_host.data();
     const float* kqv_ptr = kqv.data();
     float* qt_host_ptr = qt_host.data();
@@ -41,17 +41,17 @@ TEST(SelfAttentionTest, kqtKernelTest) {
     size_t dim = 100;
     auto kqv_device_host = get_random_device_host_tensor({
         n_batch, n_sequence, dim * 3});
-    Tensor kqt_host = get_kqt_host(kqv_device_host.second);
-    Tensor kqt_device({n_batch, n_sequence, n_sequence}, DeviceType::DEVICE);
+    TensorFloat kqt_host = get_kqt_host(kqv_device_host.second);
+    TensorFloat kqt_device({n_batch, n_sequence, n_sequence}, DeviceType::DEVICE);
     launch_kqt_kernel(kqv_device_host.first.data(), kqt_device.data(), n_batch, n_sequence, dim);
     assert_near(kqt_device, kqt_host);
 }
 
-Tensor duplicate_batch(const Tensor& inp, int n_batch) {
+TensorFloat duplicate_batch(const TensorFloat& inp, int n_batch) {
     assert(inp.shape().size() == 2);
     size_t rows = inp.shape()[0];
     size_t cols = inp.shape()[1];
-    Tensor duplicated({(size_t)n_batch, rows, cols}, DeviceType::HOST);
+    TensorFloat duplicated({(size_t)n_batch, rows, cols}, DeviceType::HOST);
     const float* inp_ptr = inp.data();
     float* duplicated_ptr = duplicated.data();
     for (int i = 0; i < n_batch; ++i) {
@@ -61,8 +61,8 @@ Tensor duplicate_batch(const Tensor& inp, int n_batch) {
 }
 
 // [n_batch, n_sequence, outdim * 3] -> [n_batch, n_sequence, output_dim]
-Tensor get_batched_v(const Tensor& kqv) {
-    Tensor result({kqv.shape()[0], kqv.shape()[1], kqv.shape()[2] / 3}, DeviceType::HOST);
+TensorFloat get_batched_v(const TensorFloat& kqv) {
+    TensorFloat result({kqv.shape()[0], kqv.shape()[1], kqv.shape()[2] / 3}, DeviceType::HOST);
     int n_rows = kqv.shape()[0] * kqv.shape()[1];
     int cols = kqv.shape()[2] / 3;
     const float* kqv_ptr = kqv.data();
@@ -73,13 +73,13 @@ Tensor get_batched_v(const Tensor& kqv) {
     return result;
 }
 
-Tensor self_attention_host(const Tensor& inp_host, const Tensor& wk_wq_wv_host) {
-    Tensor duplicated_wk_wq_wv = duplicate_batch(wk_wq_wv_host, inp_host.shape()[0]);
+TensorFloat self_attention_host(const TensorFloat& inp_host, const TensorFloat& wk_wq_wv_host) {
+    TensorFloat duplicated_wk_wq_wv = duplicate_batch(wk_wq_wv_host, inp_host.shape()[0]);
     // kqv: [n_batch, n_sequence, out_dim & 3]
-    Tensor kqv = host_matrix_multiply(inp_host, duplicated_wk_wq_wv);
-    Tensor kqt = get_kqt_host(kqv);
-    Tensor softmax_kqt = softmax(kqt);
-    Tensor result = host_matrix_multiply(softmax_kqt, get_batched_v(kqv));
+    TensorFloat kqv = host_matrix_multiply(inp_host, duplicated_wk_wq_wv);
+    TensorFloat kqt = get_kqt_host(kqv);
+    TensorFloat softmax_kqt = softmax(kqt);
+    TensorFloat result = host_matrix_multiply(softmax_kqt, get_batched_v(kqv));
     return result;
 }
 
@@ -93,7 +93,7 @@ TEST(SelfAttentionTest, SelfAttentionTest) {
         in_dim, out_dim * 3}, 0.1);
     auto inp_device_host = get_random_device_host_tensor({
         n_batch, n_sequence, in_dim});
-    Tensor self_attention_device_tensor = self_attention(inp_device_host.first, wk_wq_wv_device_host.first);
-    Tensor self_attention_host_tensor = self_attention_host(inp_device_host.second, wk_wq_wv_device_host.second);
+    TensorFloat self_attention_device_tensor = self_attention(inp_device_host.first, wk_wq_wv_device_host.first);
+    TensorFloat self_attention_host_tensor = self_attention_host(inp_device_host.second, wk_wq_wv_device_host.second);
     assert_near(self_attention_device_tensor, self_attention_host_tensor);
 }
