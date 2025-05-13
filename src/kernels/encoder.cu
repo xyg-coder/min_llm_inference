@@ -19,12 +19,13 @@ __global__ void encoder_kernel(
 
     int embedding_dim_idx = idx % embedding_dim_4;
     int batch_sequence = idx / embedding_dim_4;
+    int sequence_index = batch_sequence % n_sequence;
     int inp_index = inp[batch_sequence];
     // output[idx] = wte[inp_index * embedding_dim_4 + inp % embedding_dim_4] + wpe[i_sequence + inp % embedding_dim_4]
     float4* output_4 = reinterpret_cast<float4*>(output);
     const float4* wte_4 = reinterpret_cast<const float4*>(wte);
     const float4* wpe_4 = reinterpret_cast<const float4*>(wpe);
-    output_4[idx] = float4_add(wte_4[inp_index * embedding_dim_4 + embedding_dim_idx], wpe_4[(batch_sequence % n_sequence) + embedding_dim_idx]);
+    output_4[idx] = float4_add(wte_4[inp_index * embedding_dim_4 + embedding_dim_idx], wpe_4[sequence_index * embedding_dim_4 + embedding_dim_idx]);
 }
 
 /** 

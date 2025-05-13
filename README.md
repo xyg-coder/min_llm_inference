@@ -4,13 +4,9 @@
 
 ```
 # -DUSE_ASYNC_ALLOC enabled async tensor creation / deletion
-cd build
-cmake -DUSE_ASYNC_ALLOC=ON ..
-make ..
-ctest
+make all_test
 ```
 
 ## Plan
 
-* Embedding
 * Demo inference

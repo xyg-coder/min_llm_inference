@@ -1,5 +1,6 @@
 #include "test_utils.h"
 #include "kernels/rand_assign.h"
+#include "kernels/utils.cuh"
 #include "tensor.hpp"
 #include <algorithm>
 #include <cassert>
@@ -22,12 +23,21 @@ std::pair<TensorFloat, TensorFloat> get_random_device_host_tensor(const std::vec
     return std::make_pair(device_tensor, host_tensor);
 }
 
-void assert_near(const TensorFloat &tensor_device, const TensorFloat &tensor_host, float threshold) {
+std::pair<TensorInt, TensorInt> get_random_device_host_tensor_int(const std::vector<size_t>& shape, int max_val) {
+    TensorInt device_tensor(shape, DeviceType::DEVICE);    
+    TensorInt host_tensor(shape, DeviceType::HOST);
     size_t total_size = 1;
-    for (int i = 0; i < tensor_device.shape().size(); ++i) {
-        ASSERT_EQ(tensor_device.shape()[i], tensor_host.shape()[i]);
-        total_size *= tensor_device.shape()[i];
+    for (size_t dim : shape) {
+        total_size *= dim;
     }
+    launch_randn_kernel(device_tensor.data(), total_size, max_val);
+    host_tensor.copy_from(device_tensor);
+    return std::make_pair(device_tensor, host_tensor);
+}
+
+// This function is slower but can be used to find where the similarity begins
+void assert_near_on_host(const TensorFloat &tensor_device, const TensorFloat &tensor_host, float threshold) {
+    size_t total_size = tensor_device.get_total_size();
     TensorFloat copy_from_device(tensor_device.shape(), DeviceType::HOST);
     copy_from_device.copy_from(tensor_device);
     const float* copy_from_device_ptr = copy_from_device.data();
@@ -36,6 +46,13 @@ void assert_near(const TensorFloat &tensor_device, const TensorFloat &tensor_hos
         ASSERT_NEAR(copy_from_device_ptr[i], host_tensor_ptr[i], threshold)
             << "Mismatch at (" << i <<  ")";
     }
+}
+
+void assert_near(const TensorFloat &tensor_device, const TensorFloat &tensor_host, float threshold) {
+    size_t total_size = tensor_device.get_total_size();
+    TensorFloat copy_from_host(tensor_device.shape(), DeviceType::DEVICE);
+    copy_from_host.copy_from(tensor_host);
+    assert_float_kernel_close(tensor_device.data(), copy_from_host.data(), total_size, threshold);
 }
 
 TensorFloat host_matrix_multiply(const TensorFloat& inp1, const TensorFloat& inp2) {
@@ -115,4 +132,23 @@ void print_host(const float *data, int size) {
     for (int i = 0; i < size; ++i) {
         printf("printing host: %d = %f\n", i, data[i]);
     }
+}
+
+TensorFloat encoder_host(const TensorFloat& wte, const TensorFloat& wpe, const TensorInt& inp, size_t batch_size, size_t n_sequence, size_t embedding_dim) {
+    TensorFloat output({batch_size, n_sequence, embedding_dim});
+    const float* wte_ptr = wte.data();
+    const float* wpe_ptr = wpe.data();
+    const int* inp_ptr = inp.data();
+    float* output_ptr = output.data();
+    for (int i = 0; i < n_sequence; ++i) {
+        const float* wpe_ptr_base = wpe_ptr + i * embedding_dim;
+        for (int j = 0; j < batch_size; ++j) {
+            int idx = inp_ptr[j * n_sequence + i];
+            const float* wte_ptr_base = wte_ptr + idx * embedding_dim;
+            for (int k = 0; k < embedding_dim; ++k) {
+                output_ptr[j * n_sequence * embedding_dim + i * embedding_dim + k] = wpe_ptr_base[k] + wte_ptr_base[k];
+            }
+        }
+    }
+    return output;
 }

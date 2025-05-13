@@ -7,6 +7,8 @@
 
 std::pair<TensorFloat, TensorFloat> get_random_device_host_tensor(const std::vector<size_t>& shape, float ratio = 1);
 
+std::pair<TensorInt, TensorInt> get_random_device_host_tensor_int(const std::vector<size_t>& shape, int max_val);
+
 TensorFloat host_matrix_multiply(const TensorFloat& inp1, const TensorFloat& inp2);
 
 TensorFloat softmax(const TensorFloat& inp);
@@ -16,3 +18,5 @@ TensorFloat transpose(const TensorFloat& inp);
 void assert_near(const TensorFloat& tensor_device, const TensorFloat& tensor_host, float threashold = 1e-3);
 
 void print_host(const float* data, int size);
+
+TensorFloat encoder_host(const TensorFloat& wte, const TensorFloat& wpe, const TensorInt& inp, size_t batch_size, size_t n_sequence, size_t embedding_dim);
