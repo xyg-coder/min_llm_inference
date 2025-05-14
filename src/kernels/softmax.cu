@@ -20,7 +20,7 @@ __global__ void softmax(float* out, const float* inp, int N, int T) {
     cg::thread_block block = cg::this_thread_block();
     cg::thread_block_tile<WARP_SIZE> warp = cg::tiled_partition<WARP_SIZE>(block);
     int row_id = blockIdx.x * warp.meta_group_size() + warp.meta_group_rank();
-    if (row_id >= N) {
+    if (row_id >= N * T) {
         return;
     }
 
@@ -62,7 +62,7 @@ __global__ void softmax_in_place(float* inp, int N, int T) {
     cg::thread_block block = cg::this_thread_block();
     cg::thread_block_tile<WARP_SIZE> warp = cg::tiled_partition<WARP_SIZE>(block);
     int row_id = blockIdx.x * warp.meta_group_size() + warp.meta_group_rank();
-    if (row_id >= N) {
+    if (row_id >= N * T) {
         return;
     }
 

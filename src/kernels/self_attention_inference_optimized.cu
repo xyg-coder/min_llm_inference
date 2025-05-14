@@ -1,5 +1,8 @@
 #include "kernels/gemm.h"
 #include "tensor.hpp"
+#include "kernels/utils.cuh"
+#include <cfloat>
+#include <vector_types.h>
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
 #include <cassert>
@@ -26,7 +29,7 @@ __global__ void fill_new_kt_v_cache(
     const int* lengths,
     const float* wk, const float* wv,
     float* kt_cache, float* v_cache,
-    int num_new_batches, int n_sequence,
+    int n_sequence,
     int input_dim, int output_dim) {
     
     __shared__ float inp_shared[TILE_SIZE][TILE_SIZE];
@@ -121,9 +124,9 @@ __global__ void get_latest_kt_q_v(
         __syncthreads();
         if (output_col_idx < output_dim) {
             for (int j = 0; j < TILE_SIZE_SQUARE; ++j) {
-                k_result += (base_inp[j] * wk[(i + j) * output_dim + output_col_idx]);
-                v_result += (base_inp[j] * wv[(i + j) * output_dim + output_col_idx]);
-                q_result += (base_inp[j] * wq[(i + j) * output_dim + output_col_idx]);
+                k_result += (inp_shared[j] * wk[(i + j) * output_dim + output_col_idx]);
+                v_result += (inp_shared[j] * wv[(i + j) * output_dim + output_col_idx]);
+                q_result += (inp_shared[j] * wq[(i + j) * output_dim + output_col_idx]);
             }
         }
         __syncthreads();
@@ -147,10 +150,10 @@ __global__ void qkt(
     
     __shared__ float q_shared[TILE_SIZE_SQUARE];
     int batch_i = blockIdx.y;
-    int result_col = blockIdx.x * TILE_SIZE + threadIdx.x;
+    int result_col = blockIdx.x * TILE_SIZE_SQUARE + threadIdx.x;
     int cur_batch_length = lengths[batch_i];
     // all threads in this block exceed the cur_batch_lenght, no need to calculate
-    if (blockIdx.x * TILE_SIZE >= cur_batch_length) {
+    if (blockIdx.x * TILE_SIZE_SQUARE >= cur_batch_length) {
         return;
     }
     const float* base_q = q + batch_i * dim;
@@ -188,33 +191,125 @@ __global__ void softmax_in_place_with_lengths(
     cg::thread_block block = cg::this_thread_block();
     cg::thread_block_tile<WARP_SIZE> warp = cg::tiled_partition<WARP_SIZE>(block);
     int row_id = blockIdx.x * warp.meta_group_size() + warp.meta_group_rank();
-    if (row_id >= n_batch)
+    if (row_id >= n_batch) {
+        return;
+    }
+
+    const float* qkt_base = qkt + row_id * n_sequence;
+    float maxval = -FLT_MAX;
+    float sumval = 0.0f;
+
+    const float4* qkt_vec4 = reinterpret_cast<const float4*>(qkt_base);
+    int cur_length = lengths[row_id];
+    for (int i = warp.thread_rank(); i < (cur_length + 4  - 1) / 4; i += warp.num_threads()) {
+        float4 v = qkt_vec4[i];
+        float old_max_val = maxval;
+        for (int j = 0; i * 4 + j < cur_length; ++j) {
+            maxval = fmax(maxval, vec_at(v, j));
+        }
+        sumval *= expf(old_max_val - maxval);
+        for (int j = 0; i * 4 + j < cur_length; ++j) {
+            sumval += expf(vec_at(v, j) - maxval);
+        }
+    }
+
+    float global_maxval = cg::reduce(warp, maxval, cg::greater<float>{});
+    sumval *= expf(maxval - global_maxval);
+    float global_sum = cg::reduce(warp, sumval, cg::plus<float>{});
+    float norm = 1.f / global_sum;
+    float temp[4];
+    float4* out_vec = reinterpret_cast<float4*>(qkt + row_id * n_sequence);
+    for (int i = warp.thread_rank(); i < n_sequence / 4; i += warp.num_threads()) {
+        float4 v = out_vec[i];
+        for (int j = 0; j < 4; ++j) {
+            if (i * 4 + j < cur_length) {
+                temp[j] = expf(vec_at(v, j) - global_maxval) * norm;
+            } else {
+                temp[j] = 0.0f;
+            }
+        }
+        out_vec[i] = *reinterpret_cast<float4*>(temp);
+    }
+}
+
+/**
+ * softmax_result: [n_batch, n_sequence] 
+ * v_cache: v_cache: [n_batch, n_sequence, output_dim]
+ * v_result: [n_batch, output_dim]
+ */
+__global__ void softmax_v(
+    const float* softmax_result, const float* v_cache,
+    float* v_result,
+    const int* lengths,
+    int n_batch, int n_sequence, int output_dim) {
+
+    int i_batch = blockIdx.y;
+    __shared__ float softmax_res_share[TILE_SIZE_SQUARE];
+    int cur_batch_length = lengths[i_batch];
+    const float* softmax_result_base = softmax_result + i_batch * n_sequence;
+    const float* v_cache_base = v_cache + i_batch * n_sequence * output_dim;
+    float result = 0;
+    int write_col = blockIdx.x * TILE_SIZE_SQUARE + threadIdx.x;
+    for (int i = 0; i < output_dim; i += TILE_SIZE_SQUARE) {
+        if (i + threadIdx.x < cur_batch_length) {
+            softmax_res_share[threadIdx.x] = softmax_result_base[i + threadIdx.x];
+        } else {
+            softmax_res_share[threadIdx.x] = 0.0f;
+        }
+        __syncthreads();
+        for (int j = 0; i + j < cur_batch_length; ++j) {
+            result += (softmax_res_share[j] * v_cache_base[j * output_dim + write_col]);
+        }
+        __syncthreads();
+    }
+    v_result[i_batch * output_dim + write_col] = result;
 }
 
 
-TensorFloat inference_self_attention(
+void inference_self_attention(
     const TensorFloat& inp, const TensorInt& lengths,
     const TensorFloat& wk,
     const TensorFloat& wq,
     const TensorFloat& wv,
-    const TensorInt& new_batch_idx, TensorFloat& k_cache, TensorFloat& v_cache) {
+    const TensorInt& new_batch_idx, TensorFloat& kt_cache, TensorFloat& v_cache,
+    // avoid frequent creation of tensors
+    TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result) {
     
+    int n_batch = inp.shape()[0];
+    int n_sequence = inp.shape()[1];
+    int input_dim = inp.shape()[2];
+    int output_dim = wk.shape()[1];
+    int num_new_batches = new_batch_idx.shape()[0];
     
-    // read from new_batch_idx, [b, s, dim] * [wk_wq_wv] -> [b, s, dim] -> k_cache, v_cache
-    // this is one matrix, multiplication kernel
-    fill_kt_v_cache();
+    dim3 blockDim(TILE_SIZE, TILE_SIZE);
+    dim3 gridDim(
+        (output_dim + TILE_SIZE - 1) / TILE_SIZE, (n_sequence + TILE_SIZE - 1) / TILE_SIZE, n_batch);
+    fill_new_kt_v_cache<<<gridDim, blockDim>>>(
+        inp.data(), new_batch_idx.data(), lengths.data(), wk.data(), wv.data(), kt_cache.data(),
+        v_cache.data(), n_sequence, input_dim, output_dim);
+    CUDA_CHECK_LAST();
 
-    // for each batch, fetch the latest sequence, [b, 1, dim] * [wk_wq_wv](1, dim, dim *3) -> [b, 1, dim * 3]
-    // meanwhile, put k, v to the kv_cache
-    get_latest_kt_q_v();
 
-    // [b, 1, dim] * [b, dim, n_sequence] -> [b, 1, n_sequence]
-    qkt();
+    gridDim = dim3(ceil_div(output_dim, TILE_SIZE_SQUARE), n_batch);
+    get_latest_kt_q_v<<<gridDim, TILE_SIZE_SQUARE>>>(
+        inp.data(), lengths.data(),
+        wk.data(), wq.data(), wv.data(), kt_cache.data(),
+        v_cache.data(), q_output.data(), n_batch,
+        n_sequence, input_dim, output_dim);
+    CUDA_CHECK_LAST();
 
-    // softmax with the mask considered. Other elements are 0 -> [b, 1, n_sequence]
-    softmax_with_lengths();
+    gridDim = dim3(ceil_div(n_sequence, TILE_SIZE_SQUARE), n_batch);
+    qkt<<<gridDim, TILE_SIZE_SQUARE>>>(
+        q_output.data(), kt_cache.data(), lengths.data(), qkt_output.data(),
+        n_batch, n_sequence, output_dim);
+    CUDA_CHECK_LAST();
 
-    // [b,1,n_sequence]*[b, n_sequence,dim]
-    softmax_v();
-    return;
+    softmax_in_place_with_lengths<<<ceil_div(n_batch * WARP_SIZE, TILE_SIZE_SQUARE), TILE_SIZE_SQUARE>>>(
+        qkt_output.data(), n_batch, n_sequence, lengths.data());
+    CUDA_CHECK_LAST();
+
+    gridDim = dim3(ceil_div(output_dim, TILE_SIZE_SQUARE), n_batch);
+    softmax_v<<<gridDim, TILE_SIZE_SQUARE>>>(
+        qkt_output.data(), v_cache.data(), attention_result.data(),
+        lengths.data(), n_batch, n_sequence, output_dim);
 }
