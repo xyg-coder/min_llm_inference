@@ -1,6 +1,7 @@
 #include "kernels/gemm.h"
 #include "tensor.hpp"
 #include "kernels/utils.cuh"
+#include "kernels/self_attention_inference_optimized.h"
 #include <cfloat>
 #include <vector_types.h>
 #include <cooperative_groups.h>
@@ -234,12 +235,12 @@ __global__ void softmax_in_place_with_lengths(
 
 /**
  * softmax_result: [n_batch, n_sequence] 
- * v_cache: v_cache: [n_batch, n_sequence, output_dim]
+ * v_cache: [n_batch, n_sequence, output_dim]
  * v_result: [n_batch, output_dim]
  */
 __global__ void softmax_v(
     const float* softmax_result, const float* v_cache,
-    float* v_result,
+    float* softmax_v_result,
     const int* lengths,
     int n_batch, int n_sequence, int output_dim) {
 
@@ -262,7 +263,7 @@ __global__ void softmax_v(
         }
         __syncthreads();
     }
-    v_result[i_batch * output_dim + write_col] = result;
+    softmax_v_result[i_batch * output_dim + write_col] = result;
 }
 
 
@@ -275,40 +276,90 @@ void inference_self_attention(
     // avoid frequent creation of tensors
     TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result) {
     
+    launch_fill_new_kt_v_cache(inp, new_batch_idx, lengths, wk, wv, kt_cache, v_cache);
+
+    launch_get_latest_kt_q_v(inp, lengths, wk, wq, wv, kt_cache, v_cache, q_output);
+
+    launch_qkt(q_output, kt_cache, lengths, qkt_output);
+
+    launch_softmax_in_place_with_lengths(qkt_output, lengths);
+
+    launch_softmax_v(qkt_output, v_cache, attention_result, lengths);
+}
+
+void launch_fill_new_kt_v_cache(
+    const TensorFloat& inp, const TensorInt& new_batch_idx, const TensorInt& lengths,
+    const TensorFloat& wk, const TensorFloat& wv, TensorFloat& kt_cache,
+    TensorFloat& v_cache) {
+    
     int n_batch = inp.shape()[0];
     int n_sequence = inp.shape()[1];
     int input_dim = inp.shape()[2];
     int output_dim = wk.shape()[1];
-    int num_new_batches = new_batch_idx.shape()[0];
-    
+    int n_new_batch = new_batch_idx.shape()[0];
     dim3 blockDim(TILE_SIZE, TILE_SIZE);
     dim3 gridDim(
-        (output_dim + TILE_SIZE - 1) / TILE_SIZE, (n_sequence + TILE_SIZE - 1) / TILE_SIZE, n_batch);
+        (output_dim + TILE_SIZE - 1) / TILE_SIZE, (n_sequence + TILE_SIZE - 1) / TILE_SIZE, n_new_batch);
     fill_new_kt_v_cache<<<gridDim, blockDim>>>(
         inp.data(), new_batch_idx.data(), lengths.data(), wk.data(), wv.data(), kt_cache.data(),
         v_cache.data(), n_sequence, input_dim, output_dim);
     CUDA_CHECK_LAST();
+}
 
+void launch_get_latest_kt_q_v(
+    const TensorFloat& inp, const TensorInt& lengths,
+    const TensorFloat& wk, const TensorFloat& wq,
+    const TensorFloat& wv, TensorFloat& kt_cache,
+    TensorFloat& v_cache, TensorFloat& q_output) {
 
-    gridDim = dim3(ceil_div(output_dim, TILE_SIZE_SQUARE), n_batch);
+    int n_batch = inp.shape()[0];
+    int n_sequence = inp.shape()[1];
+    int input_dim = inp.shape()[2];
+    int output_dim = wk.shape()[1];
+
+    dim3 gridDim(ceil_div(output_dim, TILE_SIZE_SQUARE), n_batch);
     get_latest_kt_q_v<<<gridDim, TILE_SIZE_SQUARE>>>(
         inp.data(), lengths.data(),
         wk.data(), wq.data(), wv.data(), kt_cache.data(),
         v_cache.data(), q_output.data(), n_batch,
         n_sequence, input_dim, output_dim);
     CUDA_CHECK_LAST();
+}
 
-    gridDim = dim3(ceil_div(n_sequence, TILE_SIZE_SQUARE), n_batch);
+void launch_qkt(
+    const TensorFloat& q_output, const TensorFloat& kt_cache, const TensorInt& lengths,
+    TensorFloat& qkt_output) {
+
+    int n_batch = q_output.shape()[0];
+    int n_sequence = kt_cache.shape()[2];
+    int output_dim = q_output.shape()[1];
+
+    dim3 gridDim(ceil_div(n_sequence, TILE_SIZE_SQUARE), n_batch);
     qkt<<<gridDim, TILE_SIZE_SQUARE>>>(
         q_output.data(), kt_cache.data(), lengths.data(), qkt_output.data(),
         n_batch, n_sequence, output_dim);
     CUDA_CHECK_LAST();
+}
 
+void launch_softmax_in_place_with_lengths(
+    TensorFloat& qkt_output, const TensorInt& lengths) {
+
+    int n_batch = qkt_output.shape()[0];
+    int n_sequence = qkt_output.shape()[1];
     softmax_in_place_with_lengths<<<ceil_div(n_batch * WARP_SIZE, TILE_SIZE_SQUARE), TILE_SIZE_SQUARE>>>(
         qkt_output.data(), n_batch, n_sequence, lengths.data());
     CUDA_CHECK_LAST();
+}
 
-    gridDim = dim3(ceil_div(output_dim, TILE_SIZE_SQUARE), n_batch);
+void launch_softmax_v(
+    const TensorFloat& qkt_output, const TensorFloat& v_cache, TensorFloat& attention_result,
+    const TensorInt& lengths) {
+    
+    int n_batch = v_cache.shape()[0];
+    int n_sequence = v_cache.shape()[1];
+    int output_dim = v_cache.shape()[2];
+
+    dim3 gridDim(ceil_div(output_dim, TILE_SIZE_SQUARE), n_batch);
     softmax_v<<<gridDim, TILE_SIZE_SQUARE>>>(
         qkt_output.data(), v_cache.data(), attention_result.data(),
         lengths.data(), n_batch, n_sequence, output_dim);

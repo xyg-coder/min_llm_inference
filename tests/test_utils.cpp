@@ -1,4 +1,5 @@
 #include "test_utils.h"
+#include "include/test_utils.h"
 #include "kernels/rand_assign.h"
 #include "kernels/utils.cuh"
 #include "tensor.hpp"
@@ -7,9 +8,60 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
-#include <utility>
+#include <random>
 #include <gtest/gtest.h>
+#include <utility>
 #include <vector>
+#include "self_attention_inference_optimized_host.h"
+
+/**
+ * inp: [n_batch, n_sequence, input_dim]
+ * new_batch_idx: [n_new_batch]
+ * lengths: [n_batch]
+ * wk: [input_dim, output_dim]
+ * wv: [input_dim, output_dim]
+ * kt_cache: [n_batch_size, output_dim, n_sequence]
+ * v_cache: [n_batch_size, n_sequence, output_dim]
+ */
+void fill_new_kt_v_cache(
+    const TensorFloat& inp, const TensorInt& new_batch_idx, const TensorInt& lengths,
+    const TensorFloat& wk, const TensorFloat& wv, TensorFloat& kt_cache,
+    TensorFloat& v_cache) {
+
+    int n_batch = inp.shape()[0];
+    int n_sequence = inp.shape()[1];
+    int input_dim = inp.shape()[2];
+    int output_dim = wk.shape()[1];
+    int n_new_batch = new_batch_idx.shape()[0];
+    
+    const float* inp_data = inp.data();
+    const int* new_batch_idx_data = new_batch_idx.data();
+    const int* lengths_data = lengths.data();
+    const float* wk_data = wk.data();
+    const float* wv_data = wv.data();
+    float* kt_cache_data = kt_cache.data();
+    float* v_cache_data = v_cache.data();
+
+    // inp * wk, transpose -> [n_batch_size, output_dim, n_sequence]
+    // inp * wv -> [n_batch_size, n_sequence, output_dim]
+    for (int i = 0; i < n_new_batch; ++i) {
+        int batch_index = new_batch_idx_data[i];
+        int cur_length = lengths_data[batch_index];
+        const float* inp_base = inp_data + batch_index * n_sequence * input_dim;
+        for (int j = 0; j < cur_length; ++j) {
+            for (int k = 0; k < output_dim; ++k) {
+                float k_result = 0;
+                float v_result = 0;
+                for (int w = 0; w < input_dim; ++w) {
+                    k_result += (inp_base[j * input_dim + w] * wk_data[w * output_dim + k]);
+                    v_result += (inp_base[j * input_dim + w] * wv_data[w * output_dim + k]);
+                }
+                kt_cache_data[batch_index * output_dim * n_sequence + k * n_sequence + j] = k_result;
+                v_cache_data[batch_index * output_dim * n_sequence + j * output_dim + k] = v_result;
+            }
+        }
+    }
+}
 
 std::pair<TensorFloat, TensorFloat> get_random_device_host_tensor(const std::vector<size_t> &shape, float ratio) {
     TensorFloat device_tensor(shape, DeviceType::DEVICE);    
@@ -151,4 +203,81 @@ TensorFloat encoder_host(const TensorFloat& wte, const TensorFloat& wpe, const T
         }
     }
     return output;
+}
+
+// both inclusive
+int get_random_number(int min, int max) {
+    std::random_device rd;                          // Obtain a random number from hardware
+    std::mt19937 gen(rd());                         // Seed the generator
+    std::uniform_int_distribution<> distr(min, max);   // Define the range [0, 74]
+
+    return distr(gen); 
+}
+
+std::vector<int> get_unique_num_array(int min, int max, int size) {
+    // Prepare a list of available numbers
+    std::vector<int> numbers;
+    for (int i = min; i <= max; ++i) {
+        numbers.push_back(i);
+    }
+
+    // Shuffle to randomize the order
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::shuffle(numbers.begin(), numbers.end(), gen);
+
+    // Take the first n numbers as the result
+    std::vector<int> result(numbers.begin(), numbers.begin() + size);
+    return result;
+}
+
+std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOptimizedSelfAttention> generate_device_and_host_tensors() {
+    size_t n_batch = 1024;
+    size_t n_sequence = 1024;
+    size_t input_dim = 512;
+    size_t output_dim = 1024;
+    size_t n_new_batches = get_random_number(1, 1024);
+    std::vector<int> new_batch_indices = get_unique_num_array(0, 1024, n_new_batches);
+    auto inp_device_host = get_random_device_host_tensor({n_batch, n_sequence, input_dim});
+    auto lengths_device_host = get_random_device_host_tensor_int({n_batch}, 1024);
+    auto wk_device_host = get_random_device_host_tensor({input_dim, output_dim});
+    auto wq_device_host = get_random_device_host_tensor({input_dim, output_dim});
+    auto wv_device_host = get_random_device_host_tensor({input_dim, output_dim});
+    TensorInt new_batch_idx_host({new_batch_indices.size()}, DeviceType::HOST);
+    std::copy(new_batch_indices.begin(), new_batch_indices.end(), new_batch_idx_host.data());
+    TensorInt new_batch_idx_device({new_batch_indices.size()}, DeviceType::DEVICE);
+    new_batch_idx_device.copy_from(new_batch_idx_host);
+
+    auto kt_cache_device_host = get_random_device_host_tensor({n_batch, output_dim, n_sequence});
+    auto v_cache_device_host = get_random_device_host_tensor({n_batch, n_sequence, output_dim});
+    auto q_output_device_host = get_random_device_host_tensor({n_batch, output_dim});
+    auto qkt_output_device_host = get_random_device_host_tensor({n_batch, n_sequence});
+    auto attention_result_device_host = get_random_device_host_tensor({n_batch, output_dim});
+    return std::make_pair(
+        TensorWrapForInferenceOptimizedSelfAttention{
+            inp_device_host.first,
+            lengths_device_host.first,
+            wk_device_host.first,
+            wq_device_host.first,
+            wv_device_host.first,
+            new_batch_idx_device,
+            kt_cache_device_host.first,
+            v_cache_device_host.first,
+            q_output_device_host.first,
+            qkt_output_device_host.first,
+            attention_result_device_host.first
+        },
+        TensorWrapForInferenceOptimizedSelfAttention{
+            inp_device_host.second,
+            lengths_device_host.second,
+            wk_device_host.second,
+            wq_device_host.second,
+            wv_device_host.second,
+            new_batch_idx_device,
+            kt_cache_device_host.second,
+            v_cache_device_host.second,
+            q_output_device_host.second,
+            qkt_output_device_host.second,
+            attention_result_device_host.second
+        });
 }
