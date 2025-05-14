@@ -16,6 +16,7 @@ TensorFloat softmax(const TensorFloat& inp);
 TensorFloat transpose(const TensorFloat& inp);
 
 void assert_near(const TensorFloat& tensor_device, const TensorFloat& tensor_host, float threashold = 1e-3);
+void assert_near_on_host(const TensorFloat &tensor_device, const TensorFloat &tensor_host, float threshold=1e-3);
 
 void print_host(const float* data, int size);
 
