@@ -168,7 +168,7 @@ __global__ void qkt(
             q_shared[threadIdx.x] = 0.0f;
         }
         __syncthreads();
-        for (int j = 0; j < TILE_SIZE_SQUARE; ++j) {
+        for (int j = 0; result_col < cur_batch_length && j < TILE_SIZE_SQUARE; ++j) {
             result += (q_shared[j] * base_kt[(i + j) * n_sequence + result_col]);
         }
         __syncthreads();
@@ -251,15 +251,15 @@ __global__ void softmax_v(
     const float* v_cache_base = v_cache + i_batch * n_sequence * output_dim;
     float result = 0;
     int write_col = blockIdx.x * TILE_SIZE_SQUARE + threadIdx.x;
-    for (int i = 0; i < output_dim; i += TILE_SIZE_SQUARE) {
+    for (int i = 0; i < cur_batch_length; i += TILE_SIZE_SQUARE) {
         if (i + threadIdx.x < cur_batch_length) {
             softmax_res_share[threadIdx.x] = softmax_result_base[i + threadIdx.x];
         } else {
             softmax_res_share[threadIdx.x] = 0.0f;
         }
         __syncthreads();
-        for (int j = 0; write_col < output_dim && j < TILE_SIZE_SQUARE; ++j) {
-            result += (softmax_res_share[j] * v_cache_base[j * output_dim + write_col]);
+        for (int j = 0; write_col < output_dim && j < TILE_SIZE_SQUARE && i + j < cur_batch_length; ++j) {
+            result += (softmax_res_share[j] * v_cache_base[(i + j) * output_dim + write_col]);
         }
         __syncthreads();
     }

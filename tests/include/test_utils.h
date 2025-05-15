@@ -43,3 +43,6 @@ std::vector<int> get_unique_num_array(int min, int max, int size);
 
 std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOptimizedSelfAttention> generate_device_and_host_tensors(
     size_t n_batch=1024, size_t n_sequence=1024, size_t input_dim=32, size_t output_dim=32);
+
+
+std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOptimizedSelfAttention> generate_random_shape_device_and_host_tensors();

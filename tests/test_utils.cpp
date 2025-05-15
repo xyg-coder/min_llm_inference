@@ -280,6 +280,15 @@ std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOp
         });
 }
 
+std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOptimizedSelfAttention> generate_random_shape_device_and_host_tensors() {
+    static thread_local std::mt19937_64 rng{std::random_device{}()};
+    std::uniform_int_distribution<size_t> dist_dims(100, 1050);
+    std::uniform_int_distribution<size_t> dist_batch(1, 100);
+    std::uniform_int_distribution<size_t> dist_sequence(100, 200);
+    return generate_device_and_host_tensors(
+        dist_batch(rng), dist_sequence(rng) * 4, dist_dims(rng), dist_dims(rng));
+}
+
 /**
  * inp: [n_batch, n_sequence, input_dim]
  * lengths: [n_batch]
@@ -425,4 +434,23 @@ void softmax_v_host(
             attention_result_batch_data[j] = result;
         }
     }
+}
+
+void self_attention_inference_host(const TensorFloat& inp, const TensorInt& lengths,
+    const TensorFloat& wk,
+    const TensorFloat& wq,
+    const TensorFloat& wv,
+    const TensorInt& new_batch_idx, TensorFloat& kt_cache, TensorFloat& v_cache,
+    // avoid frequent creation of tensors
+    TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result) {
+
+    fill_new_kt_v_cache(inp, new_batch_idx, lengths, wk, wv, kt_cache, v_cache);
+
+    get_latest_kt_q_v(inp, lengths, wk, wq, wv, kt_cache, v_cache, q_output);
+
+    qkt_host(q_output, kt_cache, lengths, qkt_output);
+
+    softmax_in_place_with_lengths_host(qkt_output, lengths);
+
+    softmax_v_host(qkt_output, v_cache, attention_result, lengths);
 }

@@ -23,3 +23,11 @@ void softmax_in_place_with_lengths_host(
 void softmax_v_host(
     const TensorFloat& softmax_result, const TensorFloat& v_cache, TensorFloat& attention_result,
     const TensorInt& lengths);
+
+void self_attention_inference_host(const TensorFloat& inp, const TensorInt& lengths,
+    const TensorFloat& wk,
+    const TensorFloat& wq,
+    const TensorFloat& wv,
+    const TensorInt& new_batch_idx, TensorFloat& kt_cache, TensorFloat& v_cache,
+    // avoid frequent creation of tensors
+    TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result);
