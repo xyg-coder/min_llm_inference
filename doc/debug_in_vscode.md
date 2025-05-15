@@ -1,6 +1,6 @@
 # Debug in Vscode
 
-Add to CMakeLists.txt
+Add to CMakeLists.txt (Seems this is not needed)
 
 ```
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")

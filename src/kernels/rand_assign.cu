@@ -1,6 +1,7 @@
 #include "kernels/rand_assign.h"
 #include <ctime>
 #include <curand_kernel.h>
+#include <random>
 #include <utils.h>
 
 __global__ void randomizeArray(float *array, int N, unsigned long seed, float ratio) {
@@ -24,12 +25,12 @@ __global__ void randomizeArray(int* array, int N, unsigned int maxValue, unsigne
 }
 
 void launch_randn_kernel(float *out, int size, float ratio) {
-    randomizeArray<<<ceil_div(size, 256), 256>>>(out, size, time(NULL), ratio);
+    randomizeArray<<<ceil_div(size, 256), 256>>>(out, size, std::random_device{}(), ratio);
     CUDA_CHECK_LAST();
 }
 
 void launch_randn_kernel(int *out, int size, int max_value) {
-    randomizeArray<<<ceil_div(size, 256), 256>>>(out, size, max_value, time(NULL));
+    randomizeArray<<<ceil_div(size, 256), 256>>>(out, size, max_value, std::random_device{}());
     CUDA_CHECK_LAST();
 }
 
