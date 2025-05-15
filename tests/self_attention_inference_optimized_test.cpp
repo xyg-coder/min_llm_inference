@@ -4,7 +4,9 @@
 #include <gtest/gtest.h>
 
 TEST(InferenceOptimizedSelfAttentionTest, FillNewKtVCache) {
-    auto device_to_host_tensors = generate_device_and_host_tensors();
+    // use strange number to test
+    auto device_to_host_tensors = generate_device_and_host_tensors(
+        313, 151, 15, 31);
     TensorWrapForInferenceOptimizedSelfAttention device_tensors = device_to_host_tensors.first;
     TensorWrapForInferenceOptimizedSelfAttention host_tensors = device_to_host_tensors.second;
     launch_fill_new_kt_v_cache(
@@ -28,7 +30,8 @@ TEST(InferenceOptimizedSelfAttentionTest, FillNewKtVCache) {
 }
 
 TEST(InferenceOptimizedSelfAttentionTest, LatestKtQVTest) {
-    auto device_to_host_tensors = generate_device_and_host_tensors();
+    auto device_to_host_tensors = generate_device_and_host_tensors(
+        313, 593, 12, 31);
     TensorWrapForInferenceOptimizedSelfAttention device_tensors = device_to_host_tensors.first;
     TensorWrapForInferenceOptimizedSelfAttention host_tensors = device_to_host_tensors.second;
 
