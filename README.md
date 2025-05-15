@@ -19,6 +19,6 @@ make all_test
 * Demo inference
 * A batch. Keep generating the next token.
     * Possible optimizations:
-        * kv-cache
         * dynamic batching
+    * Decoder
 * How to use multi-gpus to accelerate
