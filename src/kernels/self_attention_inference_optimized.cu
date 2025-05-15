@@ -174,7 +174,7 @@ __global__ void qkt(
         __syncthreads();
     }
 
-    if (result_col < n_sequence) {
+    if (result_col < cur_batch_length) {
         qkt[batch_i * n_sequence + result_col] = result / sqrtf(dim);
     }
 }
@@ -205,11 +205,11 @@ __global__ void softmax_in_place_with_lengths(
     for (int i = warp.thread_rank(); i < (cur_length + 4  - 1) / 4; i += warp.num_threads()) {
         float4 v = qkt_vec4[i];
         float old_max_val = maxval;
-        for (int j = 0; i * 4 + j < cur_length; ++j) {
+        for (int j = 0; j < 4 && i * 4 + j < cur_length; ++j) {
             maxval = fmax(maxval, vec_at(v, j));
         }
         sumval *= expf(old_max_val - maxval);
-        for (int j = 0; i * 4 + j < cur_length; ++j) {
+        for (int j = 0; j < 4 && i * 4 + j < cur_length; ++j) {
             sumval += expf(vec_at(v, j) - maxval);
         }
     }
@@ -236,7 +236,7 @@ __global__ void softmax_in_place_with_lengths(
 /**
  * softmax_result: [n_batch, n_sequence] 
  * v_cache: [n_batch, n_sequence, output_dim]
- * v_result: [n_batch, output_dim]
+ * softmax_v_result: [n_batch, output_dim]
  */
 __global__ void softmax_v(
     const float* softmax_result, const float* v_cache,
@@ -258,12 +258,14 @@ __global__ void softmax_v(
             softmax_res_share[threadIdx.x] = 0.0f;
         }
         __syncthreads();
-        for (int j = 0; i + j < cur_batch_length; ++j) {
+        for (int j = 0; write_col < output_dim && j < TILE_SIZE_SQUARE; ++j) {
             result += (softmax_res_share[j] * v_cache_base[j * output_dim + write_col]);
         }
         __syncthreads();
     }
-    softmax_v_result[i_batch * output_dim + write_col] = result;
+    if (write_col < output_dim) {
+        softmax_v_result[i_batch * output_dim + write_col] = result;
+    }
 }
 
 
@@ -352,7 +354,7 @@ void launch_softmax_in_place_with_lengths(
 }
 
 void launch_softmax_v(
-    const TensorFloat& qkt_output, const TensorFloat& v_cache, TensorFloat& attention_result,
+    const TensorFloat& softmax_result, const TensorFloat& v_cache, TensorFloat& attention_result,
     const TensorInt& lengths) {
     
     int n_batch = v_cache.shape()[0];
@@ -361,6 +363,6 @@ void launch_softmax_v(
 
     dim3 gridDim(ceil_div(output_dim, TILE_SIZE_SQUARE), n_batch);
     softmax_v<<<gridDim, TILE_SIZE_SQUARE>>>(
-        qkt_output.data(), v_cache.data(), attention_result.data(),
+        softmax_result.data(), v_cache.data(), attention_result.data(),
         lengths.data(), n_batch, n_sequence, output_dim);
 }

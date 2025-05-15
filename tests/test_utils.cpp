@@ -329,3 +329,100 @@ void get_latest_kt_q_v(
         }
     }
 }
+
+/**
+ * q: [n_batch, dim]
+ * kt: [n_batch, dim, n_sequence]
+ * qkt: [n_batch, n_sequence]
+ */
+void qkt_host(
+    const TensorFloat& q_output, const TensorFloat& kt_cache, const TensorInt& lengths,
+    TensorFloat& qkt_output) {
+    
+    int n_batch = q_output.shape()[0];
+    int output_dim = q_output.shape()[1];
+    int n_sequence = kt_cache.shape()[2];
+
+    const float* q_output_data = q_output.data();
+    const float* kt_cache_data = kt_cache.data();
+    const int* lengths_data = lengths.data();
+    float* qkt_output_data = qkt_output.data();
+
+    for (int i = 0; i < n_batch; ++i) {
+        int cur_length = lengths_data[i];
+        const float* q_output_batch_data = q_output_data + i * output_dim;
+        const float* kt_cache_batch_data = kt_cache_data + i * output_dim * n_sequence;
+        float* qkt_output_batch_data = qkt_output_data + i * n_sequence;
+        for (int j = 0; j < cur_length; ++j) {
+            float result = 0;
+            for (int k = 0; k < output_dim; ++k) {
+                result += (q_output_batch_data[k] * kt_cache_batch_data[k * n_sequence + j]);
+            }
+            qkt_output_batch_data[j] = result / std::sqrt(output_dim);
+        }
+    }
+}
+
+/**
+ * qkt: [n_batch, n_sequence]
+ * result is written to qkt, with the same shape
+ * Any element exceeding the lengths is 0
+ */
+void softmax_in_place_with_lengths_host(
+    TensorFloat& qkt_output, const TensorInt& lengths) {
+
+    int n_batch = qkt_output.shape()[0];
+    int n_sequence = qkt_output.shape()[1];
+    float* qkt_data = qkt_output.data();
+    const int* lengths_data = lengths.data();
+    for (int i = 0; i < n_batch; ++i) {
+        float* qkt_batch_data = qkt_data + i * n_sequence;
+        int cur_length = lengths_data[i];
+        float maxVal =  -std::numeric_limits<float>::infinity();
+        for (int j = 0; j < cur_length; ++j) {
+            maxVal = std::max(maxVal, qkt_batch_data[j]);
+        }
+        float sum = 0;
+        for (int j = 0; j < cur_length; ++j) {
+            sum += std::exp(qkt_batch_data[j] - maxVal);
+        }
+        for (int j = 0; j < n_sequence; ++j) {
+            if (j >= cur_length) {
+                qkt_batch_data[j] = 0.0f;
+            } else {
+                qkt_batch_data[j] = std::exp(qkt_batch_data[j] - maxVal) / sum;
+            }
+        }
+    }
+}
+
+/**
+ * softmax_result: [n_batch, n_sequence] 
+ * v_cache: [n_batch, n_sequence, output_dim]
+ * attention_result: [n_batch, output_dim]
+ */
+void softmax_v_host(
+    const TensorFloat& softmax_result, const TensorFloat& v_cache, TensorFloat& attention_result,
+    const TensorInt& lengths) {
+    
+    int n_batch = softmax_result.shape()[0];
+    int n_sequence = softmax_result.shape()[1];
+    int output_dim = v_cache.shape()[2];
+    const float* softmax_result_data = softmax_result.data();
+    const float* v_cache_data = v_cache.data();
+    float* attention_result_data = attention_result.data();
+    const int* lengths_data = lengths.data();
+    for (int i = 0; i < n_batch; ++i) {
+        const float* softmax_result_batch_data = softmax_result_data + i * n_sequence;
+        const float* v_cache_batch_data = v_cache_data + i * n_sequence * output_dim;
+        float* attention_result_batch_data = attention_result_data + i * output_dim;
+        int cur_length = lengths_data[i];
+        for (int j = 0; j < output_dim; ++j) {
+            float result = 0;
+            for (int k = 0; k < cur_length; ++k) {
+                result += (softmax_result_batch_data[k] * v_cache_batch_data[k * output_dim + j]);
+            }
+            attention_result_batch_data[j] = result;
+        }
+    }
+}

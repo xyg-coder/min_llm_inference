@@ -22,5 +22,5 @@ void launch_softmax_in_place_with_lengths(
     TensorFloat& qkt_output, const TensorInt& lengths);
 
 void launch_softmax_v(
-    const TensorFloat& qkt_output, const TensorFloat& v_cache, TensorFloat& attention_result,
+    const TensorFloat& softmax_result, const TensorFloat& v_cache, TensorFloat& attention_result,
     const TensorInt& lengths);

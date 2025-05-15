@@ -12,3 +12,14 @@ void get_latest_kt_q_v(
     const TensorFloat& wk, const TensorFloat& wq,
     const TensorFloat& wv, TensorFloat& kt_cache,
     TensorFloat& v_cache, TensorFloat& q_output);
+
+void qkt_host(
+    const TensorFloat& q_output, const TensorFloat& kt_cache, const TensorInt& lengths,
+    TensorFloat& qkt_output);
+
+void softmax_in_place_with_lengths_host(
+    TensorFloat& qkt_output, const TensorInt& lengths);
+
+void softmax_v_host(
+    const TensorFloat& softmax_result, const TensorFloat& v_cache, TensorFloat& attention_result,
+    const TensorInt& lengths);
