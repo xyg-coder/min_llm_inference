@@ -232,8 +232,8 @@ std::vector<int> get_unique_num_array(int min, int max, int size) {
 }
 
 std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOptimizedSelfAttention> generate_device_and_host_tensors() {
-    size_t n_batch = 128;
-    size_t n_sequence = 128;
+    size_t n_batch = 1024;
+    size_t n_sequence = 1024;
     size_t input_dim = 32;
     size_t output_dim = 32;
     size_t n_new_batches = get_random_number(1, n_batch);
@@ -280,4 +280,54 @@ std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOp
             qkt_output_device_host.second,
             attention_result_device_host.second
         });
+}
+
+/**
+ * inp: [n_batch, n_sequence, input_dim]
+ * lengths: [n_batch]
+ * wq, wk, wv: [input_dim, output_dim]
+ * v_cache: [n_batch, n_sequence, output_dim]
+ * kt_cache: [n_batch, output_dim, n_sequence]
+ * q_output: [n_batch, output_dim]
+
+ * 1. use the last embedding for each batch to multiply with wq, wk, wv -> [n_batch, 1, onput_dim]
+ * 2. save to k_cache, v_cache and q_output
+ */
+void get_latest_kt_q_v(
+    const TensorFloat& inp, const TensorInt& lengths,
+    const TensorFloat& wk, const TensorFloat& wq,
+    const TensorFloat& wv, TensorFloat& kt_cache,
+    TensorFloat& v_cache, TensorFloat& q_output) {
+
+    int n_batch = inp.shape()[0];
+    int n_sequence = inp.shape()[1];
+    int input_dim = inp.shape()[2];
+    int output_dim = wk.shape()[1];
+
+    const float* inp_data = inp.data();
+    const int* lengths_data = lengths.data();
+    const float* wk_data = wk.data();
+    const float* wq_data = wq.data();
+    const float* wv_data = wv.data();
+    float* kt_cache_data = kt_cache.data();
+    float* v_cache_data = v_cache.data();
+    float* q_output_data = q_output.data();
+    
+    for (int i = 0; i < n_batch; ++i) {
+        int i_sequence = lengths_data[i] - 1;
+        const float* inp_data_sequence = inp_data + i * n_sequence * input_dim + i_sequence * input_dim;
+        for (int j = 0; j < output_dim; ++j) {
+            float kt_result = 0;
+            float v_result = 0;
+            float q_result = 0;
+            for (int w = 0; w < input_dim; ++w) {
+                kt_result += (inp_data_sequence[w] * wk_data[w * output_dim + j]);
+                v_result += (inp_data_sequence[w] * wv_data[w * output_dim + j]);
+                q_result += (inp_data_sequence[w] * wq_data[w * output_dim + j]);
+            }
+            q_output_data[i * output_dim + j] = q_result;
+            v_cache_data[i * n_sequence * output_dim + i_sequence * output_dim + j] = v_result;
+            kt_cache_data[i * n_sequence * output_dim + j * n_sequence + i_sequence] = kt_result;
+        }
+    }
 }

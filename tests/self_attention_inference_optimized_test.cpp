@@ -25,4 +25,34 @@ TEST(InferenceOptimizedSelfAttentionTest, FillNewKtVCache) {
         host_tensors.v_cache);
     assert_near(device_tensors.kt_cache, host_tensors.kt_cache);
     assert_near(device_tensors.v_cache, host_tensors.v_cache);
-} 
+}
+
+TEST(InferenceOptimizedSelfAttentionTest, LatestKtQVTest) {
+    auto device_to_host_tensors = generate_device_and_host_tensors();
+    TensorWrapForInferenceOptimizedSelfAttention device_tensors = device_to_host_tensors.first;
+    TensorWrapForInferenceOptimizedSelfAttention host_tensors = device_to_host_tensors.second;
+
+    launch_get_latest_kt_q_v(
+        device_tensors.inp,
+        device_tensors.lengths,
+        device_tensors.wk,
+        device_tensors.wq,
+        device_tensors.wv,
+        device_tensors.kt_cache,
+        device_tensors.v_cache,
+        device_tensors.q_output);
+
+    get_latest_kt_q_v(
+        host_tensors.inp,
+        host_tensors.lengths,
+        host_tensors.wk,
+        host_tensors.wq,
+        host_tensors.wv,
+        host_tensors.kt_cache,
+        host_tensors.v_cache,
+        host_tensors.q_output);
+    
+    assert_near(device_tensors.kt_cache, host_tensors.kt_cache);
+    assert_near(device_tensors.v_cache, host_tensors.v_cache);
+    assert_near(device_tensors.q_output, host_tensors.q_output);
+}

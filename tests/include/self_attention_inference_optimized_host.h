@@ -6,3 +6,9 @@ void fill_new_kt_v_cache(
     const TensorFloat& inp, const TensorInt& new_batch_idx, const TensorInt& lengths,
     const TensorFloat& wk, const TensorFloat& wv, TensorFloat& kt_cache,
     TensorFloat& v_cache);
+
+void get_latest_kt_q_v(
+    const TensorFloat& inp, const TensorInt& lengths,
+    const TensorFloat& wk, const TensorFloat& wq,
+    const TensorFloat& wv, TensorFloat& kt_cache,
+    TensorFloat& v_cache, TensorFloat& q_output);
