@@ -5,7 +5,7 @@
 
 TEST(InferenceOptimizedSelfAttentionTest, FillNewKtVCache) {
     auto device_to_host_tensors = generate_device_and_host_tensors();
-    TensorWrapForInferenceOptimizedSelfAttention device_tensors = device_to_host_tensors.second;
+    TensorWrapForInferenceOptimizedSelfAttention device_tensors = device_to_host_tensors.first;
     TensorWrapForInferenceOptimizedSelfAttention host_tensors = device_to_host_tensors.second;
     launch_fill_new_kt_v_cache(
         device_tensors.inp,

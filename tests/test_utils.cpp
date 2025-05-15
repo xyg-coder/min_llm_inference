@@ -232,14 +232,14 @@ std::vector<int> get_unique_num_array(int min, int max, int size) {
 }
 
 std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOptimizedSelfAttention> generate_device_and_host_tensors() {
-    size_t n_batch = 1024;
-    size_t n_sequence = 1024;
-    size_t input_dim = 512;
-    size_t output_dim = 1024;
-    size_t n_new_batches = get_random_number(1, 1024);
-    std::vector<int> new_batch_indices = get_unique_num_array(0, 1024, n_new_batches);
+    size_t n_batch = 128;
+    size_t n_sequence = 128;
+    size_t input_dim = 32;
+    size_t output_dim = 32;
+    size_t n_new_batches = get_random_number(1, n_batch);
+    std::vector<int> new_batch_indices = get_unique_num_array(0, n_batch - 1, n_new_batches);
     auto inp_device_host = get_random_device_host_tensor({n_batch, n_sequence, input_dim});
-    auto lengths_device_host = get_random_device_host_tensor_int({n_batch}, 1024);
+    auto lengths_device_host = get_random_device_host_tensor_int({n_batch}, n_batch);
     auto wk_device_host = get_random_device_host_tensor({input_dim, output_dim});
     auto wq_device_host = get_random_device_host_tensor({input_dim, output_dim});
     auto wv_device_host = get_random_device_host_tensor({input_dim, output_dim});
@@ -273,7 +273,7 @@ std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOp
             wk_device_host.second,
             wq_device_host.second,
             wv_device_host.second,
-            new_batch_idx_device,
+            new_batch_idx_host,
             kt_cache_device_host.second,
             v_cache_device_host.second,
             q_output_device_host.second,
