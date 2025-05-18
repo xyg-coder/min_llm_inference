@@ -274,6 +274,7 @@ void inference_self_attention(
     const TensorFloat& wk,
     const TensorFloat& wq,
     const TensorFloat& wv,
+    // TODO: update the new_batch_idx to always have [n_batch] shape, and -1 as the default number
     const TensorInt& new_batch_idx, TensorFloat& kt_cache, TensorFloat& v_cache,
     // avoid frequent creation of tensors
     TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result) {
