@@ -1,3 +1,4 @@
+#include "constants.h"
 #include "kernels/encoder.h"
 #include <cassert>
 #include <vector_types.h>
@@ -39,8 +40,48 @@ void launch_encoder_kernel(
     int batch_size, int n_sequence, int embedding_dim) {
 
     assert(embedding_dim % 4 == 0);
-    constexpr int block_dim = 256;
-    int grid_dim = ceil_div(batch_size * n_sequence * embedding_dim / 4, block_dim);
-    encoder_kernel<<<grid_dim, block_dim>>>(wte, wpe, inp, output, batch_size, n_sequence, embedding_dim);
+    int grid_dim = ceil_div(batch_size * n_sequence * embedding_dim / 4, BLOCK_DIM);
+    encoder_kernel<<<grid_dim, BLOCK_DIM>>>(wte, wpe, inp, output, batch_size, n_sequence, embedding_dim);
+    CUDA_CHECK_LAST();
+}
+
+/**
+ * emb_table: [n_vocab, inputDim]
+ * wpe: [n_sequence, inputDim]
+ * inp: [n_batch, n_sequence]
+ * output: [n_batch, n_sequence, inputDim]
+ * lengths: [n_batch]
+ * new_item_indices: [n_new_items]
+ */
+__global__ void inference_optimized_encoder(
+    const float* emb_table, const float* wpe, const int* inp, float* output, const int* lengths,
+    const int* new_item_indices,
+    int batch_size, int n_sequence, int embedding_dim, int n_new_items) {
+
+    assert(embedding_dim % 4 == 0);
+    int i_batch = new_item_indices[blockIdx.z];
+    int batch_len = lengths[i_batch];
+    if (blockIdx.y >= batch_len) {
+        return;
+    }
+    int token_id = inp[i_batch * n_sequence + blockIdx.y];
+    int dim_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int dim_start = dim_idx * 4;
+
+    const float4* emb_table_start = reinterpret_cast<const float4*>(emb_table + token_id * embedding_dim);
+    const float4* wpe_table_start = reinterpret_cast<const float4*>(wpe + blockIdx.y * embedding_dim);
+    float4* output_4 = reinterpret_cast<float4*>(output + i_batch * embedding_dim * n_sequence + blockIdx.y * embedding_dim + dim_start);
+    output_4[dim_start] = float4_add(emb_table_start[dim_idx], wpe_table_start[dim_idx]);
+}
+
+
+void launch_inference_optimized_encoder_kernel(
+    const float* emb_table, const float* wpe, const int* inp, float* output, const int* lengths,
+    const int* new_item_indices,
+    int batch_size, int n_sequence, int embedding_dim, int n_new_items) {
+
+    assert(embedding_dim % 4 == 0);
+    dim3 gridDim(ceil_div(embedding_dim / 4, BLOCK_DIM), n_sequence, n_new_items);
+    inference_optimized_encoder<<<gridDim, BLOCK_DIM>>>(emb_table, wpe, inp, output, lengths, new_item_indices, batch_size, n_sequence, embedding_dim, n_new_items);
     CUDA_CHECK_LAST();
 }
