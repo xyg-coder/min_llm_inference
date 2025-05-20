@@ -1,4 +1,3 @@
-#include "kernels/gemm.h"
 #include "tensor.hpp"
 #include "kernels/utils.cuh"
 #include "kernels/self_attention_inference_optimized.h"
@@ -8,9 +7,9 @@
 #include <cooperative_groups/reduce.h>
 #include <cassert>
 #include <cmath>
+#include "constants.h"
 
 namespace cg = cooperative_groups;
-constexpr int WARP_SIZE = 32;
 /**
  * inp: [n_batch, n_sequence, input_dim]
  * new_batch_idx: [n_new_batch]
@@ -87,7 +86,6 @@ __global__ void fill_new_kt_v_cache(
 }
 
 
-constexpr int TILE_SIZE_SQUARE = TILE_SIZE * TILE_SIZE;
 
 /**
  * inp: [n_batch, n_sequence, input_dim]
@@ -274,6 +272,7 @@ void inference_self_attention(
     const TensorFloat& wk,
     const TensorFloat& wq,
     const TensorFloat& wv,
+    // TODO: update the new_batch_idx to always have [n_batch] shape, and -1 as the default number
     const TensorInt& new_batch_idx, TensorFloat& kt_cache, TensorFloat& v_cache,
     // avoid frequent creation of tensors
     TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result) {
