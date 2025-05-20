@@ -3,8 +3,6 @@
 #include <cstddef>
 #include <cuda_runtime.h>
 
-const int TILE_SIZE = 16;
-
 struct Stride3D {
     size_t batch_stride;
     size_t row_stride;

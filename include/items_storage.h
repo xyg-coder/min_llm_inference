@@ -5,58 +5,63 @@
 #include <string>
 #include <vector>
 
-using IdStringPair = std::pair<int, std::string>;
+using IdTokensPair = std::pair<int, std::vector<int>>;
 
 
 class ItemsStorage {
 public:
+    ItemsStorage() = default;
     ItemsStorage(const ItemsStorage&) = delete;
     ItemsStorage& operator=(const ItemsStorage&) = delete;
-    std::vector<IdStringPair> get_pairs(int size);
-    void insert_one(const IdStringPair&);
+    std::vector<IdTokensPair> get_pairs(int size);
+    void insert_one(const IdTokensPair&);
 private:
-    std::list<IdStringPair> data_;
+    std::list<IdTokensPair> data_;
+};
+
+
+// global singleton items
+class GlobalSingleton {
+public:
+    static GlobalSingleton& get_instance();
+    // return at most size finished items
+    std::vector<IdTokensPair> pop_finished_items(int size);
+    // return at most size new items
+    std::vector<IdTokensPair> pop_new_items(int size);
+    void add_finished_items(const std::vector<IdTokensPair>&);
+    void add_new_items(const std::vector<IdTokensPair>&);
+private:
+    GlobalSingleton() = default;
+    GlobalSingleton(const GlobalSingleton&) = delete;
+    GlobalSingleton& operator=(const GlobalSingleton&) = delete;
+    ItemsStorage finished_items_;
+    ItemsStorage new_items_; 
 };
 
 
 // There will be one single instance of ItemsHandler
-class ItemsHandler {
+class ThreadSingleton {
 public:
-    ItemsHandler(const ItemsHandler&) = delete;
-    ItemsHandler& operator=(const ItemsHandler&) = delete;
-    // return at most size finished items
-    std::vector<IdStringPair> get_finished_items(int size);
-    // return at most size new items
-    std::vector<IdStringPair> get_new_items(int size);
-    void add_one_finished_item(const IdStringPair&);
-    bool is_finished() const;
-
-    /**
-     * assert decoder_result.size() == processing_items_.size()
-     * 1. for each processing_items_, append decoder_result to the end
-     * 2. check the length of processing_items_ or if meets the ending token or special_token(-1 means this is empty item)
-     * 3. insert those finished items to finished_items_
-     * 4. returns the indices ([0, n_batch-1]) of the finished results
-     */
-    std::vector<int> process_decoder_result_and_check_finished(const std::vector<std::string>& decoder_result);
+    static ThreadSingleton& get_instance();
+    std::vector<IdTokensPair>& get_processing_items();
 private:
-    ItemsStorage finished_items_;
-    ItemsStorage new_items_;
+    ThreadSingleton() = default;
+    ThreadSingleton(const ThreadSingleton&) = delete;
+    ThreadSingleton& operator=(const ThreadSingleton&) = delete;
     // processing_items_has size [n_batch]
-    std::vector<IdStringPair> processing_items_;
+    std::vector<IdTokensPair> processing_items_;
 };
 
 
 /**
  * 1. Clone the token_ids from decoder_result_device to host, and query the global token_mapping (list<string>) to fine the next tokens for each row
- * 2. get the finished_items_indices by calling itemsHandler.process_decoder_result_and_check_finished
- * 3. call itemsHandler.get_new_items to get at most new_items whose size == finished_items_indices.size() 
- * 4. return the indices of finished_results
+ * 2. Check the decoder result to see if this row is finished or not.
+ * 3. return the indices that the new items can be inserted to
  */
 std::vector<int> process_decoder_result(
     const TensorInt& decoder_result_device,
     TensorInt& decoder_result_host,
-    std::vector<std::string>& decoder_result);
+    const std::vector<std::string>& decoder_result);
 
 
 /**
@@ -65,6 +70,8 @@ std::vector<int> process_decoder_result(
  * After this step, we are ready to call encoder
  */
 void insert_new_items(
-    const std::vector<int>& finished_indices, TensorInt& new_items, TensorInt& new_lengths,
-    TensorInt& new_items_indices);
+    const std::vector<int>& finished_indices, 
+    TensorInt& inp_device, TensorInt& inp_host,
+    TensorInt& lengths_device, TensorInt& lengths_host,
+    TensorInt& new_items_indices_device, TensorInt& new_items_indices_host);
     

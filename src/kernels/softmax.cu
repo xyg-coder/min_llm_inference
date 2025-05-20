@@ -7,8 +7,8 @@
 #include <kernels/utils.cuh>
 #include <kernels/softmax.h>
 #include <utils.h>
+#include "constants.h"
 
-const int WARP_SIZE = 32;
 const int SOFTMAX_BLOCK_SIZE = 256;
 
 namespace cg = cooperative_groups;
