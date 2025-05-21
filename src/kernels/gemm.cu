@@ -3,6 +3,61 @@
 #include "constants.h"
 #include <cstddef>
 
+
+/**
+    s1: [batch_size, rows, N]
+    s2: [batch_size, cols, N]
+    output: [batch_size, rows, cols]
+*/
+__global__ void gemm_transpose_kernel(
+    const float* s1, const float* s2, float* output,
+    size_t batch_size, size_t rows, size_t cols, size_t N) {
+
+    __shared__ float s1_shared[TILE_SIZE][TILE_SIZE];
+    __shared__ float s2_shared[TILE_SIZE][TILE_SIZE];
+    const float* base_s1 = s1 + blockIdx.z * rows * N;
+    const float* base_s2 = s2 + blockIdx.z * cols * N;
+    float result = 0;
+    /**
+     * writing to [blockIdx.z, blockIdx.y * TILE_SIZE + threadIdx.y, blockIdx.x * TILE_SIZE + threadIdx.x]
+     * using s1[blockIdx.z, blockIdx.y * TILE_SIZE : blockIdx.y * TILE_SIZE + TILE_SIZE, :]
+     * using s2[blockIdx.z, blockIdx.x * TILE_SIZE : blockIdx.x * TILE_SIZE + TILE_SIZE, :]
+     */
+    for (size_t i = 0; i < N; i += TILE_SIZE) {
+        if (blockIdx.y * TILE_SIZE + threadIdx.y < rows && i + threadIdx.x < N) {
+            s1_shared[threadIdx.y][threadIdx.x] = base_s1[(blockIdx.y * TILE_SIZE + threadIdx.y) * N + i + threadIdx.x];
+        } else {
+            s1_shared[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+        if (blockIdx.x * TILE_SIZE + threadIdx.y < cols && i + threadIdx.x < N) {
+            // this is to ensure coalensce, always use threadIdx.x as the last dim
+            s2_shared[threadIdx.y][threadIdx.x] = base_s2[(blockIdx.x * TILE_SIZE + threadIdx.y) * N + i + threadIdx.x];
+        } else {
+            s2_shared[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+        __syncthreads();
+        
+        #pragma unroll
+        for (size_t j = 0; j < TILE_SIZE; ++j) {
+            result += (s1_shared[threadIdx.y][j] * s2_shared[threadIdx.x][j]);
+        }
+        __syncthreads();
+    }
+
+    if (blockIdx.y * TILE_SIZE + threadIdx.y < rows && blockIdx.x * TILE_SIZE + threadIdx.x < cols) {
+        output[blockIdx.z * rows * cols + (blockIdx.y * TILE_SIZE + threadIdx.y) * cols + blockIdx.x * TILE_SIZE + threadIdx.x] = result;
+    }
+}
+
+void launch_gemm_transpose_kernel(const float* s1, const float* s2, float* output,
+    size_t batch_size, size_t rows, size_t cols, size_t N) {
+
+    dim3 gridDim(ceil_div(cols, TILE_SIZE), ceil_div(rows, TILE_SIZE), batch_size);
+    dim3 blockDim(TILE_SIZE, TILE_SIZE);
+    gemm_transpose_kernel<<<gridDim, blockDim>>>(s1, s2, output, batch_size, rows, cols, N);
+    CUDA_CHECK_LAST();
+}
+
 /**
     s1: [batch_size, rows, N]
     s2: [batch_size, N, cols]

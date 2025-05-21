@@ -146,3 +146,8 @@ TEST(InferenceOptimizedSelfAttentionTest, InferenceOptimizedSelfAttentionTest) {
     
     assert_near(device_tensors.attention_result, host_tensors.attention_result);
 }
+
+TEST(InferenceOptimizedSelfAttentionTest, InferenceOptimizedSelfAttentionZeroLengthTest) {
+    // TO FILL
+    ASSERT_FALSE(true);
+}
