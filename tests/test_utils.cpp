@@ -457,3 +457,33 @@ void self_attention_inference_host(const TensorFloat& inp, const TensorInt& leng
 
     softmax_v_host(qkt_output, v_cache, attention_result, lengths);
 }
+
+TensorFloat transpose_host(const TensorFloat& inp_host) {
+    int batch_size;
+    int rows;
+    int cols;
+    TensorFloat result({1});
+    if (inp_host.shape().size() == 3) {
+        batch_size = inp_host.shape()[0];
+        rows = inp_host.shape()[1];
+        cols = inp_host.shape()[2];
+        result = TensorFloat({batch_size, cols, rows}, DeviceType::HOST);
+    } else {
+        assert(inp_host.shape().size() == 2);
+        batch_size = 1;
+        rows = inp_host.shape()[0];
+        cols = inp_host.shape()[1];
+        result = TensorFloat({cols, rows}, DeviceType::HOST);
+    }
+
+    const float* inp_host_data = inp_host.data();
+    float* output_data = result.data();
+    for (int i = 0; i < batch_size; ++i) {
+        for (int j = 0; j < rows; ++j) {
+            for (int k = 0; k < cols; ++k) {
+                output_data[i * rows * cols + k * rows + j] = inp_host_data[i * rows * cols + j * cols + k];
+            }
+        }
+    }
+    return result;
+}

@@ -28,7 +28,7 @@ TensorFloat host_matrix_multiply(const TensorFloat& inp1, const TensorFloat& inp
 
 TensorFloat softmax(const TensorFloat& inp);
 
-TensorFloat transpose(const TensorFloat& inp);
+TensorFloat transpose_host(const TensorFloat& inp_host);
 
 void assert_near(const TensorFloat& tensor_device, const TensorFloat& tensor_host, float threashold = 1e-3);
 void assert_near_on_host(const TensorFloat &tensor_device, const TensorFloat &tensor_host, float threshold=1e-3);

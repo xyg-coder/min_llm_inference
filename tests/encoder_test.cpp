@@ -27,3 +27,7 @@ TEST(EncoderTest, EncoderTest) {
 
     assert_near(output_device, output_host);
 }
+
+TEST(EncoderTest, EncoderInferenceOptimizedTest) {
+    ASSERT_TRUE(false);
+}
