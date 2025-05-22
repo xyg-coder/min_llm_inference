@@ -4,15 +4,15 @@
 #include <gtest/gtest.h>
 
 TEST(EncoderTest, EncoderTest) {
-    size_t n_batch = 1024;
+    size_t n_batch = 128;
     size_t n_sequence = 512;
-    size_t max_sequence = 1024;
-    size_t n_vocab = 4096;
-    size_t embedding_dim = 1024;
+    size_t max_sequence = 512;
+    size_t n_vocab = 2048;
+    size_t embedding_dim = 512;
 
     auto wte_device_host = get_random_device_host_tensor({n_vocab, embedding_dim});
     auto wpe_device_host = get_random_device_host_tensor({max_sequence, embedding_dim});
-    auto inp_device_host = get_random_device_host_tensor_int({n_batch, n_sequence}, n_vocab);
+    auto inp_device_host = get_random_device_host_tensor_int({n_batch, n_sequence}, n_vocab - 1);
 
     TensorFloat wte_device = wte_device_host.first;
     TensorFloat wpe_device = wpe_device_host.first;

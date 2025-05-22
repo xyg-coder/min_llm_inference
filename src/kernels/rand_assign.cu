@@ -19,7 +19,7 @@ __global__ void randomizeArray(int* array, int N, unsigned int maxValue, unsigne
     if (idx < N) {
         curandState state;
         curand_init(seed, idx, 0, &state); 
-        unsigned int randomInt = curand(&state) % maxValue;
+        unsigned int randomInt = curand(&state) % (maxValue + 1);
         array[idx] = randomInt;
     }
 }

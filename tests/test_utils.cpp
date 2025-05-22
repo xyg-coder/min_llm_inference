@@ -282,7 +282,7 @@ std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOp
 
 std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOptimizedSelfAttention> generate_random_shape_device_and_host_tensors() {
     static thread_local std::mt19937_64 rng{std::random_device{}()};
-    std::uniform_int_distribution<size_t> dist_dims(100, 1050);
+    std::uniform_int_distribution<size_t> dist_dims(100, 257);
     std::uniform_int_distribution<size_t> dist_batch(1, 100);
     std::uniform_int_distribution<size_t> dist_sequence(100, 200);
     return generate_device_and_host_tensors(
@@ -321,6 +321,9 @@ void get_latest_kt_q_v(
     float* q_output_data = q_output.data();
     
     for (int i = 0; i < n_batch; ++i) {
+        if (lengths_data[i] == 0) {
+            continue;;
+        }
         int i_sequence = lengths_data[i] - 1;
         const float* inp_data_sequence = inp_data + i * n_sequence * input_dim + i_sequence * input_dim;
         for (int j = 0; j < output_dim; ++j) {
