@@ -146,3 +146,45 @@ TEST(InferenceOptimizedSelfAttentionTest, InferenceOptimizedSelfAttentionTest) {
     
     assert_near(device_tensors.attention_result, host_tensors.attention_result);
 }
+
+TEST(InferenceOptimizedSelfAttentionTest, InferenceOptimizedSelfAttentionZeroLengthTest) {
+    auto device_to_host_tensors = generate_random_shape_device_and_host_tensors();
+
+    TensorWrapForInferenceOptimizedSelfAttention device_tensors = device_to_host_tensors.first;
+    TensorWrapForInferenceOptimizedSelfAttention host_tensors = device_to_host_tensors.second;
+
+    int n_batch = device_tensors.lengths.shape()[0];
+    int* host_lengths_data = host_tensors.lengths.data();
+    for (int i = 0; i < n_batch; i += 5) {
+        host_lengths_data[i] = 0;
+    }
+    device_tensors.lengths.copy_from(host_tensors.lengths);
+
+    inference_self_attention(
+        device_tensors.inp,
+        device_tensors.lengths,
+        device_tensors.wk,
+        device_tensors.wq,
+        device_tensors.wv,
+        device_tensors.new_batch_idx,
+        device_tensors.kt_cache,
+        device_tensors.v_cache,
+        device_tensors.q_output,
+        device_tensors.qkt_output,
+        device_tensors.attention_result);
+
+    self_attention_inference_host(
+        host_tensors.inp,
+        host_tensors.lengths,
+        host_tensors.wk,
+        host_tensors.wq,
+        host_tensors.wv,
+        host_tensors.new_batch_idx,
+        host_tensors.kt_cache,
+        host_tensors.v_cache,
+        host_tensors.q_output,
+        host_tensors.qkt_output,
+        host_tensors.attention_result);
+    
+    assert_near(device_tensors.attention_result, host_tensors.attention_result);
+}

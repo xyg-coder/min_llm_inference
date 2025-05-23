@@ -1,6 +1,5 @@
 #include "items_storage.h"
 #include "constants.h"
-#include <algorithm>
 #include <cassert>
 #include <string>
 #include <vector>

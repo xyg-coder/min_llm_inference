@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.18)
 project(min_llm_inference LANGUAGES CXX CUDA)
 
+# uncomment when debugging
+# set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
+# set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -g -G")
 
 # Set the C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -16,11 +19,6 @@ set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
 set(KERNELS_DIR ${SRC_DIR}/kernels)
 set(TESTS_DIR ${CMAKE_SOURCE_DIR}/tests)
 
-# To test different tensor allocation
-# enum class TensorDataType {
-#     SYNC_ALLOCATE = 0,
-#     ASYNC_ALLOCATE = 1
-# };
 option(USE_ASYNC_ALLOC "If ON, default to async allocation" OFF)
 
 if(USE_ASYNC_ALLOC)

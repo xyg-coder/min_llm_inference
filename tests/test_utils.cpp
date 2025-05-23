@@ -1,10 +1,12 @@
 #include "test_utils.h"
+#include "constants.h"
 #include "include/test_utils.h"
 #include "kernels/rand_assign.h"
 #include "kernels/utils.cuh"
 #include "tensor.hpp"
 #include <algorithm>
 #include <cassert>
+#include <cfloat>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
@@ -100,11 +102,31 @@ void assert_near_on_host(const TensorFloat &tensor_device, const TensorFloat &te
     }
 }
 
+// This function is slower but can be used to find where the similarity begins
+void assert_near_on_host(const TensorInt &tensor_device, const TensorInt &tensor_host) {
+    size_t total_size = tensor_device.get_total_size();
+    TensorInt copy_from_device(tensor_device.shape(), DeviceType::HOST);
+    copy_from_device.copy_from(tensor_device);
+    const int* copy_from_device_ptr = copy_from_device.data();
+    const int* host_tensor_ptr = tensor_host.data();
+    for (size_t i = 0; i < total_size; ++i) {
+        ASSERT_EQ(copy_from_device_ptr[i], host_tensor_ptr[i])
+            << "Mismatch at (" << i <<  ")";
+    }
+}
+
 void assert_near(const TensorFloat &tensor_device, const TensorFloat &tensor_host, float threshold) {
     size_t total_size = tensor_device.get_total_size();
     TensorFloat copy_from_host(tensor_device.shape(), DeviceType::DEVICE);
     copy_from_host.copy_from(tensor_host);
     assert_float_kernel_close(tensor_device.data(), copy_from_host.data(), total_size, threshold);
+}
+
+void assert_near(const TensorInt& tensor_device, const TensorInt& tensor_host) {
+    size_t total_size = tensor_device.get_total_size();
+    TensorInt copy_from_host(tensor_device.shape(), DeviceType::DEVICE);
+    copy_from_host.copy_from(tensor_host);
+    assert_int_kernel_close(tensor_device.data(), copy_from_host.data(), total_size);
 }
 
 TensorFloat host_matrix_multiply(const TensorFloat& inp1, const TensorFloat& inp2) {
@@ -282,7 +304,7 @@ std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOp
 
 std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOptimizedSelfAttention> generate_random_shape_device_and_host_tensors() {
     static thread_local std::mt19937_64 rng{std::random_device{}()};
-    std::uniform_int_distribution<size_t> dist_dims(100, 1050);
+    std::uniform_int_distribution<size_t> dist_dims(100, 257);
     std::uniform_int_distribution<size_t> dist_batch(1, 100);
     std::uniform_int_distribution<size_t> dist_sequence(100, 200);
     return generate_device_and_host_tensors(
@@ -321,6 +343,9 @@ void get_latest_kt_q_v(
     float* q_output_data = q_output.data();
     
     for (int i = 0; i < n_batch; ++i) {
+        if (lengths_data[i] == 0) {
+            continue;;
+        }
         int i_sequence = lengths_data[i] - 1;
         const float* inp_data_sequence = inp_data + i * n_sequence * input_dim + i_sequence * input_dim;
         for (int j = 0; j < output_dim; ++j) {
@@ -453,4 +478,131 @@ void self_attention_inference_host(const TensorFloat& inp, const TensorInt& leng
     softmax_in_place_with_lengths_host(qkt_output, lengths);
 
     softmax_v_host(qkt_output, v_cache, attention_result, lengths);
+}
+
+TensorFloat transpose_host(const TensorFloat& inp_host) {
+    int batch_size;
+    int rows;
+    int cols;
+    TensorFloat result({1});
+    if (inp_host.shape().size() == 3) {
+        batch_size = inp_host.shape()[0];
+        rows = inp_host.shape()[1];
+        cols = inp_host.shape()[2];
+        result = TensorFloat({batch_size, cols, rows}, DeviceType::HOST);
+    } else {
+        assert(inp_host.shape().size() == 2);
+        batch_size = 1;
+        rows = inp_host.shape()[0];
+        cols = inp_host.shape()[1];
+        result = TensorFloat({cols, rows}, DeviceType::HOST);
+    }
+
+    const float* inp_host_data = inp_host.data();
+    float* output_data = result.data();
+    for (int i = 0; i < batch_size; ++i) {
+        for (int j = 0; j < rows; ++j) {
+            for (int k = 0; k < cols; ++k) {
+                output_data[i * rows * cols + k * rows + j] = inp_host_data[i * rows * cols + j * cols + k];
+            }
+        }
+    }
+    return result;
+}
+
+/**
+ * emb_table: [n_vocab, inputDim]
+ * wpe: [n_sequence, inputDim]
+ * inp: [n_batch, n_sequence]
+ * output: [n_batch, n_sequence, inputDim]
+ * lengths: [n_batch]
+ * new_item_indices: [n_new_items]
+ */
+void inference_optimized_encoder_host(const float* emb_table, const float* wpe, const int* inp, float* output, const int* lengths,
+    const int* new_item_indices,
+    int batch_size, int n_sequence, int embedding_dim, int n_new_items) {
+
+    for (int i_new_index = 0; i_new_index < n_new_items; ++i_new_index) {
+        int i_batch = new_item_indices[i_new_index];
+        for (int i_seq = 0; i_seq < lengths[i_batch]; ++i_seq) {
+            int token_id = inp[i_batch * n_sequence + i_seq];
+            for (int i_dim = 0; i_dim < embedding_dim; ++i_dim) {
+                output[i_batch * n_sequence * embedding_dim + i_seq * embedding_dim + i_dim] =
+                    emb_table[token_id * embedding_dim + i_dim] + wpe[i_seq * embedding_dim + i_dim];
+            }
+        }
+    }
+}
+
+TensorFloat gemm_transpose_host(const TensorFloat& s1, const TensorFloat& s2) {
+    TensorFloat transposed = transpose_host(s2);
+    return host_matrix_multiply(s1, transposed);
+}
+
+/**
+ * emb_score: [n_batch, n_vocab]
+ * decoder_result: [n_batch]
+ * lengths: [n_batch]
+ * inp: [n_batch, n_sequence, input_dim]
+ * wpe_table: [n_sequence, input_dim]
+ * emb_table: [n_vocab, input_dim]
+ *
+ * 1. Each block handles one batch, get the maximum index among n_vocab
+ * 2. Save the index to decoder_result
+ * 3. lengths += 1
+ * 4. calculate the new embedding and save to inp
+ */
+void decoder_host_kernel(
+    const float* emb_score, int* decoder_result,
+    int* lengths, float* inp, const float* wpe_table,
+    const float* emb_table,
+    int n_batch, int n_vocab, int n_sequence, int input_dim) {
+
+    for (int i_batch = 0; i_batch < n_batch; ++i_batch) {
+        int cur_length = lengths[i_batch];
+        if (cur_length == 0) {
+            decoder_result[i_batch] = EMPTY_ROW_TOKEN_ID;
+            continue;
+        }
+        const float* emb_score_base = emb_score + i_batch * n_vocab;
+
+        float max_score = -FLT_MAX;
+        int max_index = -1;
+        for (int i = 0; i < n_vocab; ++i) {
+            if (max_score < emb_score_base[i]) {
+                max_score = emb_score_base[i];
+                max_index = i;
+            }
+        }
+        decoder_result[i_batch] = max_index;
+        lengths[i_batch] = cur_length + 1;
+
+        if (cur_length + 1 >= n_sequence || max_index == EOF_TOKEN_ID) {
+            continue;
+        }
+        float* inp_base = inp + i_batch * n_sequence * input_dim + cur_length * input_dim;
+        const float* emb_table_base = emb_table + max_index * input_dim;
+        const float* wpe_base = wpe_table + cur_length * input_dim;
+        // save to inp
+        for (int i_dim = 0; i_dim < input_dim; ++i_dim) {
+            inp_base[i_dim] = emb_table_base[i_dim] + wpe_base[i_dim];
+        }
+    }
+}
+
+
+void decoder_host(
+    const TensorFloat& batch_embs, const TensorFloat& emb_table,
+    TensorFloat& emb_score,
+    const TensorFloat& wpe_table,
+    TensorFloat& inp, TensorInt& lengths, TensorInt& decoder_result) {
+
+    int batch_size = batch_embs.shape()[0];
+    int emb_dim = batch_embs.shape()[1];
+    int n_vocab = emb_table.shape()[0];
+    int n_sequence = wpe_table.shape()[0];
+
+    emb_score = gemm_transpose_host(batch_embs, emb_table);
+    decoder_host_kernel(emb_score.data(), decoder_result.data(), lengths.data(), inp.data(), wpe_table.data(),
+        emb_table.data(), batch_size, n_vocab, n_sequence, emb_dim);
 }

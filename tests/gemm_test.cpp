@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <gtest/gtest.h>
+#include "include/test_utils.h"
 #include "tensor.hpp"
 #include "kernels/gemm.h"
 #include "test_utils.h"
@@ -142,4 +143,20 @@ TEST(GemmKernelTest, MultiBatchesBiasWithStrideMatrixMultiplication) {
             }
         }
     }
+}
+
+TEST(GemmKernelTest, GemmTransposeTest) {
+    size_t batch_size = get_random_number(5, 10);
+    size_t rows = get_random_number(1, 1024);
+    size_t cols = get_random_number(1, 1024);
+    size_t dims = get_random_number(1, 1024);
+    auto s1_device_host = get_random_device_host_tensor({batch_size, rows, dims});
+    auto s2_device_host = get_random_device_host_tensor({batch_size, cols, dims});
+
+    TensorFloat result_device({batch_size, rows, cols}, DeviceType::DEVICE);
+    launch_gemm_transpose_kernel(
+        s1_device_host.first.data(), s2_device_host.first.data(), result_device.data(),
+        batch_size, rows, cols, dims);
+    TensorFloat result_host = gemm_transpose_host(s1_device_host.second, s2_device_host.second);
+    assert_near(result_device, result_host);
 }

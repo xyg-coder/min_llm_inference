@@ -106,7 +106,12 @@ __global__ void get_latest_kt_q_v(
     int n_batch, int n_sequence, int input_dim, int output_dim) {
     __shared__ float inp_shared[TILE_SIZE_SQUARE];
     int i_batch = blockIdx.y;
-    int i_sequence = lengths[i_batch] - 1;
+    int cur_length = lengths[i_batch];
+    // cur_length == 0 means empty row
+    if (cur_length == 0) {
+        return;
+    }
+    int i_sequence = cur_length - 1;
     int output_col_idx = blockIdx.x * TILE_SIZE_SQUARE + threadIdx.x;
     float k_result = 0;
     float q_result = 0;
@@ -272,7 +277,6 @@ void inference_self_attention(
     const TensorFloat& wk,
     const TensorFloat& wq,
     const TensorFloat& wv,
-    // TODO: update the new_batch_idx to always have [n_batch] shape, and -1 as the default number
     const TensorInt& new_batch_idx, TensorFloat& kt_cache, TensorFloat& v_cache,
     // avoid frequent creation of tensors
     TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result) {

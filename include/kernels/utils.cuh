@@ -25,3 +25,5 @@ __device__ inline float4 float4_add(const float4& f1, const float4& f2) {
 void launch_print_kernel(const float* data, int size);
 
 void assert_float_kernel_close(const float* data1, const float* data2, int size, float threshold);
+
+void assert_int_kernel_close(const int* data1, const int* data2, int size);

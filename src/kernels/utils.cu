@@ -24,6 +24,15 @@ __global__ void compare_float_array_kernel(const float* data1, const float* data
     }
 }
 
+__global__ void compare_int_array_kernel(const int* data1, const int* data2, int size, int* exception_flag) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if (idx < size) {
+        if (data1[idx] != data2[idx]) {
+            *exception_flag = 1;
+        }
+    }
+}
+
 void assert_float_kernel_close(const float* data1, const float* data2, int size, float threshold) {
     constexpr int blockDim = 256;
     int *d_exception_flag, h_exception_flag = 0;
@@ -31,6 +40,20 @@ void assert_float_kernel_close(const float* data1, const float* data2, int size,
     cudaMemcpy(d_exception_flag, &h_exception_flag, sizeof(int), cudaMemcpyHostToDevice);
     compare_float_array_kernel<<<ceil_div(size, blockDim), blockDim>>>(
         data1, data2, size, threshold, d_exception_flag);
+    CUDA_CHECK_LAST();
+    cudaMemcpy(&h_exception_flag, d_exception_flag, sizeof(int), cudaMemcpyDeviceToHost);
+    if (h_exception_flag) {
+        throw std::runtime_error("2 arrays are not close");
+    }
+}
+
+void assert_int_kernel_close(const int* data1, const int* data2, int size) {
+    constexpr int blockDim = 256;
+    int *d_exception_flag, h_exception_flag = 0;
+    cudaMalloc(&d_exception_flag, sizeof(int));
+    cudaMemcpy(d_exception_flag, &h_exception_flag, sizeof(int), cudaMemcpyHostToDevice);
+    compare_int_array_kernel<<<ceil_div(size, blockDim), blockDim>>>(
+        data1, data2, size, d_exception_flag);
     CUDA_CHECK_LAST();
     cudaMemcpy(&h_exception_flag, d_exception_flag, sizeof(int), cudaMemcpyDeviceToHost);
     if (h_exception_flag) {

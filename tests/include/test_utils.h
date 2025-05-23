@@ -28,10 +28,12 @@ TensorFloat host_matrix_multiply(const TensorFloat& inp1, const TensorFloat& inp
 
 TensorFloat softmax(const TensorFloat& inp);
 
-TensorFloat transpose(const TensorFloat& inp);
+TensorFloat transpose_host(const TensorFloat& inp_host);
 
 void assert_near(const TensorFloat& tensor_device, const TensorFloat& tensor_host, float threashold = 1e-3);
+void assert_near(const TensorInt& tensor_device, const TensorInt& tensor_host);
 void assert_near_on_host(const TensorFloat &tensor_device, const TensorFloat &tensor_host, float threshold=1e-3);
+void assert_near_on_host(const TensorInt &tensor_device, const TensorInt &tensor_host);
 
 void print_host(const float* data, int size);
 
@@ -46,3 +48,15 @@ std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOp
 
 
 std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOptimizedSelfAttention> generate_random_shape_device_and_host_tensors();
+
+void inference_optimized_encoder_host(const float* emb_table, const float* wpe, const int* inp, float* output, const int* lengths,
+    const int* new_item_indices,
+    int batch_size, int n_sequence, int embedding_dim, int n_new_items);
+
+TensorFloat gemm_transpose_host(const TensorFloat& s1, const TensorFloat& s2);
+
+void decoder_host(
+    const TensorFloat& batch_embs, const TensorFloat& emb_table,
+    TensorFloat& emb_score,
+    const TensorFloat& wpe_table,
+    TensorFloat& inp, TensorInt& lengths, TensorInt& decoder_result);
