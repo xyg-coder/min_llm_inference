@@ -157,7 +157,6 @@ TEST(GemmKernelTest, GemmTransposeTest) {
     launch_gemm_transpose_kernel(
         s1_device_host.first.data(), s2_device_host.first.data(), result_device.data(),
         batch_size, rows, cols, dims);
-    TensorFloat transposed = transpose_host(s2_device_host.second);
-    TensorFloat result_host = host_matrix_multiply(s1_device_host.second, transposed);
+    TensorFloat result_host = gemm_transpose_host(s1_device_host.second, s2_device_host.second);
     assert_near(result_device, result_host);
 }

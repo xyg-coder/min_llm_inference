@@ -59,7 +59,7 @@ __global__ void decoder_kernel(
         if (idx < gap) {
             if (max_value[idx + gap] > max_value[idx]) {
                 max_value[idx] = max_value[idx + gap];
-                max_index[idx] = max_value[idx + gap];
+                max_index[idx] = max_index[idx + gap];
             }
         }
         __syncthreads();
@@ -73,14 +73,14 @@ __global__ void decoder_kernel(
     // 2. calculate the embedding. Every block handles one batch
     assert(input_dim % 4 == 0);
     int embedding_dim_4 = input_dim / 4;
-    if (idx >= embedding_dim_4 || cur_length >= n_sequence - 1) {
+    if (idx >= embedding_dim_4 || cur_length >= n_sequence - 1 || max_index[0] == EOF_TOKEN_ID) {
         return;
     }
 
     const float4* emb_4 = reinterpret_cast<const float4*>(emb_table + max_index[0] * input_dim);
     const float4* wpe_4 = reinterpret_cast<const float4*>(wpe_table + cur_length * input_dim);
     float4* output_4 = reinterpret_cast<float4*>(inp + i_batch * n_sequence * input_dim + cur_length * input_dim);
-    for (int i = idx; i < embedding_dim_4; ++i) {
+    for (int i = idx; i < embedding_dim_4; i += BLOCK_DIM) {
         output_4[i] = float4_add(emb_4[i], wpe_4[i]);
     }
 }
