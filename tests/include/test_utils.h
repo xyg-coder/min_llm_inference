@@ -46,3 +46,7 @@ std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOp
 
 
 std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOptimizedSelfAttention> generate_random_shape_device_and_host_tensors();
+
+void inference_optimized_encoder_host(const float* emb_table, const float* wpe, const int* inp, float* output, const int* lengths,
+    const int* new_item_indices,
+    int batch_size, int n_sequence, int embedding_dim, int n_new_items);

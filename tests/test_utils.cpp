@@ -487,3 +487,27 @@ TensorFloat transpose_host(const TensorFloat& inp_host) {
     }
     return result;
 }
+
+/**
+ * emb_table: [n_vocab, inputDim]
+ * wpe: [n_sequence, inputDim]
+ * inp: [n_batch, n_sequence]
+ * output: [n_batch, n_sequence, inputDim]
+ * lengths: [n_batch]
+ * new_item_indices: [n_new_items]
+ */
+void inference_optimized_encoder_host(const float* emb_table, const float* wpe, const int* inp, float* output, const int* lengths,
+    const int* new_item_indices,
+    int batch_size, int n_sequence, int embedding_dim, int n_new_items) {
+
+    for (int i_new_index = 0; i_new_index < n_new_items; ++i_new_index) {
+        int i_batch = new_item_indices[i_new_index];
+        for (int i_seq = 0; i_seq < lengths[i_batch]; ++i_seq) {
+            int token_id = inp[i_batch * n_sequence + i_seq];
+            for (int i_dim = 0; i_dim < embedding_dim; ++i_dim) {
+                output[i_batch * n_sequence * embedding_dim + i_seq * embedding_dim + i_dim] =
+                    emb_table[token_id * embedding_dim + i_dim] + wpe[i_seq * embedding_dim + i_dim];
+            }
+        }
+    }
+}

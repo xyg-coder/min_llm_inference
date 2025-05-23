@@ -66,12 +66,14 @@ __global__ void inference_optimized_encoder(
     }
     int token_id = inp[i_batch * n_sequence + blockIdx.y];
     int dim_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int dim_start = dim_idx * 4;
+    if (dim_idx >= embedding_dim / 4) {
+        return;
+    }
 
     const float4* emb_table_start = reinterpret_cast<const float4*>(emb_table + token_id * embedding_dim);
     const float4* wpe_table_start = reinterpret_cast<const float4*>(wpe + blockIdx.y * embedding_dim);
-    float4* output_4 = reinterpret_cast<float4*>(output + i_batch * embedding_dim * n_sequence + blockIdx.y * embedding_dim + dim_start);
-    output_4[dim_start] = float4_add(emb_table_start[dim_idx], wpe_table_start[dim_idx]);
+    float4* output_4 = reinterpret_cast<float4*>(output + i_batch * embedding_dim * n_sequence + blockIdx.y * embedding_dim);
+    output_4[dim_idx] = float4_add(emb_table_start[dim_idx], wpe_table_start[dim_idx]);
 }
 
 
