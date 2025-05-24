@@ -1,5 +1,5 @@
 #include "tensor.hpp"
-#include "feed_forward.h"
+#include "layers.h"
 #include <stdexcept>
 #include "kernels/gemm.h"
 
@@ -26,17 +26,11 @@ FeedForward::FeedForward(const TensorFloat& w, std::optional<const TensorFloat> 
     }
 }
 
-ModelIO FeedForward::forward(const ModelIO& input) {
-    if (!std::holds_alternative<TensorFloat>(input)) {
-        throw std::invalid_argument("[FeedForward] Input must be a single Tensor (not a list or dict)");
-    }
-
-    const TensorFloat& input_t = std::get<TensorFloat>(input);
-    size_t n_batch = input_t.shape()[0];
-    size_t in_features = input_t.shape()[1];
+void FeedForward::forward(const TensorFloat& input, TensorFloat& output) {
+    size_t n_batch = input.shape()[0];
+    size_t in_features = input.shape()[1];
     size_t out_features = weight_.shape()[1];
 
-    TensorFloat output_tensor({n_batch, out_features}, DeviceType::DEVICE);
     float* bias_data_ptr = nullptr;
     Stride3D bias_stride({0, 0, 0});
     if (bias_) {
@@ -45,12 +39,10 @@ ModelIO FeedForward::forward(const ModelIO& input) {
     }
 
     launch_gemm_bias_kernel(
-        input_t.data(), Stride3D{0, in_features, 1},
+        input.data(), Stride3D{0, in_features, 1},
         weight_.data(), Stride3D{0, out_features, 1},
         bias_data_ptr, bias_stride,
-        output_tensor.data(), Stride3D{0, out_features, 1},
+        output.data(), Stride3D{0, out_features, 1},
         1, n_batch, in_features, out_features
     );
-
-    return output_tensor;
 }

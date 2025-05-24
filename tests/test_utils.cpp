@@ -66,7 +66,7 @@ void fill_new_kt_v_cache(
 }
 
 std::pair<TensorFloat, TensorFloat> get_random_device_host_tensor(const std::vector<size_t> &shape, float ratio) {
-    TensorFloat device_tensor(shape, DeviceType::DEVICE);    
+    TensorFloat device_tensor(shape, DeviceType::DEVICE);
     TensorFloat host_tensor(shape, DeviceType::HOST);
     size_t total_size = 1;
     for (size_t dim : shape) {
