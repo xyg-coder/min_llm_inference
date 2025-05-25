@@ -13,6 +13,7 @@ public:
     Storage() = default;
     std::vector<IdTokensPair> pop_pairs(int size);
     void add(const std::vector<IdTokensPair>&);
+    int size() const;
 private:
     std::list<IdTokensPair> data_;
 };
@@ -27,6 +28,7 @@ public:
     std::vector<IdTokensPair> pop_new_items(int size);
     void add_finished_items(const std::vector<IdTokensPair>&);
     void add_new_items(const std::vector<IdTokensPair>&);
+    int finish_count() const;
 private:
     Storage finished_items_;
     Storage new_items_; 
@@ -50,7 +52,7 @@ private:
  */
 std::vector<int> process_decoder_result(
     const TensorInt& decoder_result_device, TensorInt& decoder_result_host,
-    ItemStorage& item_storage, ProcessingStorage& processing_storage);
+    ItemStorage& item_storage, ProcessingStorage& processing_storage, int n_sequence);
 
 
 /**

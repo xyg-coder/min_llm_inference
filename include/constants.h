@@ -8,4 +8,3 @@ constexpr int BLOCK_DIM = 256;
 constexpr int EMPTY_ROW_TOKEN_ID = -1;
 // EOF token id, this is just for demo purpose
 constexpr int EOF_TOKEN_ID = 1023;
-constexpr int MAX_TOKEN_LEN = 1024;

@@ -30,7 +30,7 @@ void start_inference_engine(
     while (!is_done(item_storage, processing_storage)) {
         inference_model.forward(inp_device, lengths_device, new_items_indices_device, decoder_result_device);
         finished_indices = process_decoder_result(
-            decoder_result_device, decoder_result_host, item_storage, processing_storage);
+            decoder_result_device, decoder_result_host, item_storage, processing_storage, n_sequence);
         insert_new_items(
             finished_indices, inp_device, inp_host, lengths_device,
             lengths_host, new_items_indices_device, new_items_indices_host, item_storage);

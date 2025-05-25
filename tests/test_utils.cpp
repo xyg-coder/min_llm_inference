@@ -253,6 +253,18 @@ std::vector<int> get_unique_num_array(int min, int max, int size) {
     return result;
 }
 
+std::vector<int> create_random_vector(size_t size, int min, int max) {
+    std::vector<int> v(size);
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> distrib(min, max); // Range [0,99]
+
+    for (auto& elem : v) {
+        elem = distrib(gen);
+    }
+    return v;
+}
+
 std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOptimizedSelfAttention> generate_device_and_host_tensors(
     size_t n_batch, size_t n_sequence, size_t input_dim, size_t output_dim) {
 

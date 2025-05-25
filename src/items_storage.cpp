@@ -23,6 +23,10 @@ void ItemStorage::add_new_items(const std::vector<IdTokensPair>& new_items) {
     new_items_.add(new_items);
 }
 
+int ItemStorage::finish_count() const {
+    return finished_items_.size();
+}
+
 std::vector<IdTokensPair> Storage::pop_pairs(int size) {
     std::vector<IdTokensPair> to_pop;
     for (int i = 0; i < size && !data_.empty(); ++i) {
@@ -40,7 +44,7 @@ void Storage::add(const std::vector<IdTokensPair>& to_add) {
 
 std::vector<int> process_decoder_result(
     const TensorInt& decoder_result_device, TensorInt& decoder_result_host,
-    ItemStorage& item_storage, ProcessingStorage& processing_storage) {
+    ItemStorage& item_storage, ProcessingStorage& processing_storage, int n_sequence) {
     
     decoder_result_host.copy_from(decoder_result_device);
     const int* decode_result_data = decoder_result_host.data();
@@ -56,7 +60,7 @@ std::vector<int> process_decoder_result(
             to_move_to_finished.push_back(processing_items[i]);
         } else {
             append_token_to_id_string_pair(processing_items[i], decode_result_data[i]);
-            if (processing_items[i].second.size() >= MAX_TOKEN_LEN) {
+            if (processing_items[i].second.size() >= n_sequence) {
                 finished_indices.push_back(i);
                 to_move_to_finished.push_back(processing_items[i]);
             }
