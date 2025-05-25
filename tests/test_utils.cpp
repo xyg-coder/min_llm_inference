@@ -606,3 +606,15 @@ void decoder_host(
     decoder_host_kernel(emb_score.data(), decoder_result.data(), lengths.data(), inp.data(), wpe_table.data(),
         emb_table.data(), batch_size, n_vocab, n_sequence, emb_dim);
 }
+
+TensorFloat mock_emb_table(int n_vocab, int embedding_dims) {
+    TensorFloat device_tensor({(size_t)n_vocab, (size_t)embedding_dims}, DeviceType::DEVICE);
+    launch_randn_kernel(device_tensor.data(), device_tensor.get_total_size());
+    return device_tensor;
+}
+
+TensorFloat mock_pos_table(int n_sequence, int embedding_dims) {
+    TensorFloat device_tensor({(size_t)n_sequence, (size_t)embedding_dims}, DeviceType::DEVICE);
+    launch_randn_kernel(device_tensor.data(), device_tensor.get_total_size());
+    return device_tensor;
+}

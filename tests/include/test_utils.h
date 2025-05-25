@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include "inference_model.h"
+#include "items_storage.h"
 #include "tensor.hpp"
 #include <utility>
 #include <vector>
@@ -60,3 +62,18 @@ void decoder_host(
     TensorFloat& emb_score,
     const TensorFloat& wpe_table,
     TensorFloat& inp, TensorInt& lengths, TensorInt& decoder_result);
+
+TensorFloat mock_emb_table(int n_vocab, int embedding_dims);
+
+TensorFloat mock_pos_table(int n_sequence, int embedding_dims);
+
+class WrappersForInferencerTest {
+public:
+    TensorFloat emb_table;
+    TensorFloat pos_table;
+    ItemStorage item_storage;
+    ProcessingStorage processing_storage;
+    InferenceModel inference_model;
+};
+
+WrappersForInferencerTest generate_wrappers_for_inference_test();

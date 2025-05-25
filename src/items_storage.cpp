@@ -3,9 +3,39 @@
 #include <cassert>
 #include <vector>
 
+std::vector<IdTokensPair> ItemStorage::pop_finished_items(int size) {
+    return finished_items_.pop_pairs(size);
+}
 
-void append_string_to_id_string_pair(IdTokensPair& id_string_pair, int to_add) {
+std::vector<IdTokensPair> ItemStorage::pop_new_items(int size) {
+    return new_items_.pop_pairs(size);
+}
+
+void append_token_to_id_string_pair(IdTokensPair& id_string_pair, int to_add) {
     id_string_pair.second.push_back(to_add);
+}
+
+void ItemStorage::add_finished_items(const std::vector<IdTokensPair>& finished_items) {
+    finished_items_.add(finished_items);
+}
+
+void ItemStorage::add_new_items(const std::vector<IdTokensPair>& new_items) {
+    new_items_.add(new_items);
+}
+
+std::vector<IdTokensPair> Storage::pop_pairs(int size) {
+    std::vector<IdTokensPair> to_pop;
+    for (int i = 0; i < size && !data_.empty(); ++i) {
+        to_pop.push_back(data_.front());
+        data_.erase(data_.begin());
+    }
+    return to_pop;
+}
+
+void Storage::add(const std::vector<IdTokensPair>& to_add) {
+    for (const IdTokensPair& item : to_add) {
+        data_.push_back(item);
+    }
 }
 
 std::vector<int> process_decoder_result(
@@ -21,11 +51,11 @@ std::vector<int> process_decoder_result(
         if (decode_result_data[i] == EMPTY_ROW_TOKEN_ID) {
             finished_indices.push_back(i);
         } else if (decode_result_data[i] == EOF_TOKEN_ID) {
-            append_string_to_id_string_pair(processing_items[i], decode_result_data[i]);
+            append_token_to_id_string_pair(processing_items[i], decode_result_data[i]);
             finished_indices.push_back(i);
             to_move_to_finished.push_back(processing_items[i]);
         } else {
-            append_string_to_id_string_pair(processing_items[i], decode_result_data[i]);
+            append_token_to_id_string_pair(processing_items[i], decode_result_data[i]);
             if (processing_items[i].second.size() >= MAX_TOKEN_LEN) {
                 finished_indices.push_back(i);
                 to_move_to_finished.push_back(processing_items[i]);

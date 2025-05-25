@@ -3,23 +3,21 @@
 #include "tensor.hpp"
 #include "utils.h"
 #include <list>
-#include <string>
 #include <vector>
 
 using IdTokensPair = std::pair<int, std::vector<int>>;
 
 
-class ItemsStorage : public NonCopyableNonClonable {
+class Storage : public NonCopyableNonClonable {
 public:
-    ItemsStorage() = default;
-    std::vector<IdTokensPair> get_pairs(int size);
-    void insert_one(const IdTokensPair&);
+    Storage() = default;
+    std::vector<IdTokensPair> pop_pairs(int size);
+    void add(const std::vector<IdTokensPair>&);
 private:
     std::list<IdTokensPair> data_;
 };
 
 
-// global singleton items
 class ItemStorage : NonCopyableNonClonable {
 public:
     ItemStorage() = default;
@@ -30,12 +28,11 @@ public:
     void add_finished_items(const std::vector<IdTokensPair>&);
     void add_new_items(const std::vector<IdTokensPair>&);
 private:
-    ItemsStorage finished_items_;
-    ItemsStorage new_items_; 
+    Storage finished_items_;
+    Storage new_items_; 
 };
 
 
-// There will be one single instance of ItemsHandler
 class ProcessingStorage : public NonCopyableNonClonable {
 public:
     ProcessingStorage() = default;
@@ -59,7 +56,8 @@ std::vector<int> process_decoder_result(
 /**
  * 1. fetch new_items with finished_indices.size()
  * 2. fill new_tokens and new_lengths. Note, we have to fill n_finished_items even there isn't enough new_items. But padding it with length==0
- * After this step, we are ready to call encoder
+ * 
+ *  After this step, we are ready to call encoder
  */
 void insert_new_items(
     const std::vector<int>& finished_indices, 
