@@ -1,8 +1,6 @@
 #pragma once
-#include "tensor.hpp"
 #include <cstdio>
 #include <cuda_runtime.h>
-#include <vector>
 
 #define CUDA_CHECK_LAST() cuda_check(cudaGetLastError(), __FILE__, __LINE__)
 

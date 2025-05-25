@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tensor.hpp"
+#include "utils.h"
 #include <list>
 #include <string>
 #include <vector>
@@ -8,11 +9,9 @@
 using IdTokensPair = std::pair<int, std::vector<int>>;
 
 
-class ItemsStorage {
+class ItemsStorage : public NonCopyableNonClonable {
 public:
     ItemsStorage() = default;
-    ItemsStorage(const ItemsStorage&) = delete;
-    ItemsStorage& operator=(const ItemsStorage&) = delete;
     std::vector<IdTokensPair> get_pairs(int size);
     void insert_one(const IdTokensPair&);
 private:
@@ -21,9 +20,9 @@ private:
 
 
 // global singleton items
-class GlobalSingleton {
+class ItemStorage : NonCopyableNonClonable {
 public:
-    static GlobalSingleton& get_instance();
+    ItemStorage() = default;
     // return at most size finished items
     std::vector<IdTokensPair> pop_finished_items(int size);
     // return at most size new items
@@ -31,23 +30,17 @@ public:
     void add_finished_items(const std::vector<IdTokensPair>&);
     void add_new_items(const std::vector<IdTokensPair>&);
 private:
-    GlobalSingleton() = default;
-    GlobalSingleton(const GlobalSingleton&) = delete;
-    GlobalSingleton& operator=(const GlobalSingleton&) = delete;
     ItemsStorage finished_items_;
     ItemsStorage new_items_; 
 };
 
 
 // There will be one single instance of ItemsHandler
-class ThreadSingleton {
+class ProcessingStorage : public NonCopyableNonClonable {
 public:
-    static ThreadSingleton& get_instance();
+    ProcessingStorage() = default;
     std::vector<IdTokensPair>& get_processing_items();
 private:
-    ThreadSingleton() = default;
-    ThreadSingleton(const ThreadSingleton&) = delete;
-    ThreadSingleton& operator=(const ThreadSingleton&) = delete;
     // processing_items_has size [n_batch]
     std::vector<IdTokensPair> processing_items_;
 };
@@ -59,9 +52,8 @@ private:
  * 3. return the indices that the new items can be inserted to
  */
 std::vector<int> process_decoder_result(
-    const TensorInt& decoder_result_device,
-    TensorInt& decoder_result_host,
-    const std::vector<std::string>& decoder_result);
+    const TensorInt& decoder_result_device, TensorInt& decoder_result_host,
+    ItemStorage& item_storage, ProcessingStorage& processing_storage);
 
 
 /**
@@ -73,5 +65,8 @@ void insert_new_items(
     const std::vector<int>& finished_indices, 
     TensorInt& inp_device, TensorInt& inp_host,
     TensorInt& lengths_device, TensorInt& lengths_host,
-    TensorInt& new_items_indices_device, TensorInt& new_items_indices_host);
+    TensorInt& new_items_indices_device, TensorInt& new_items_indices_host,
+    ItemStorage& item_storage);
     
+
+bool is_done(ItemStorage& item_storage, ProcessingStorage& processing_storage);
