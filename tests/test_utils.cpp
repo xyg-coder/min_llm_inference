@@ -28,13 +28,12 @@
 void fill_new_kt_v_cache(
     const TensorFloat& inp, const TensorInt& new_batch_idx, const TensorInt& lengths,
     const TensorFloat& wk, const TensorFloat& wv, TensorFloat& kt_cache,
-    TensorFloat& v_cache) {
+    TensorFloat& v_cache, int n_new_batch) {
 
     int n_batch = inp.shape()[0];
     int n_sequence = inp.shape()[1];
     int input_dim = inp.shape()[2];
     int output_dim = wk.shape()[1];
-    int n_new_batch = new_batch_idx.shape()[0];
     
     const float* inp_data = inp.data();
     const int* new_batch_idx_data = new_batch_idx.data();
@@ -268,17 +267,16 @@ std::vector<int> create_random_vector(size_t size, int min, int max) {
 std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOptimizedSelfAttention> generate_device_and_host_tensors(
     size_t n_batch, size_t n_sequence, size_t input_dim, size_t output_dim) {
 
-    size_t n_new_batches = get_random_number(1, n_batch);
+    int n_new_batches = get_random_number(1, n_batch);
     std::vector<int> new_batch_indices = get_unique_num_array(0, n_batch - 1, n_new_batches);
     auto inp_device_host = get_random_device_host_tensor({n_batch, n_sequence, input_dim});
     auto lengths_device_host = get_random_device_host_tensor_int({n_batch}, n_sequence);
     auto wk_device_host = get_random_device_host_tensor({input_dim, output_dim});
     auto wq_device_host = get_random_device_host_tensor({input_dim, output_dim});
     auto wv_device_host = get_random_device_host_tensor({input_dim, output_dim});
-    TensorInt new_batch_idx_host({new_batch_indices.size()}, DeviceType::HOST);
-    std::copy(new_batch_indices.begin(), new_batch_indices.end(), new_batch_idx_host.data());
-    TensorInt new_batch_idx_device({new_batch_indices.size()}, DeviceType::DEVICE);
-    new_batch_idx_device.copy_from(new_batch_idx_host);
+    auto new_batch_idx_device_host = get_random_device_host_tensor_int({n_batch}, n_batch - 1);
+    std::copy(new_batch_indices.begin(), new_batch_indices.end(), new_batch_idx_device_host.second.data());
+    new_batch_idx_device_host.first.copy_from(new_batch_idx_device_host.second);
 
     auto kt_cache_device_host = get_random_device_host_tensor({n_batch, output_dim, n_sequence});
     auto v_cache_device_host = get_random_device_host_tensor({n_batch, n_sequence, output_dim});
@@ -292,12 +290,13 @@ std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOp
             wk_device_host.first,
             wq_device_host.first,
             wv_device_host.first,
-            new_batch_idx_device,
+            new_batch_idx_device_host.first,
             kt_cache_device_host.first,
             v_cache_device_host.first,
             q_output_device_host.first,
             qkt_output_device_host.first,
-            attention_result_device_host.first
+            attention_result_device_host.first,
+            n_new_batches
         },
         TensorWrapForInferenceOptimizedSelfAttention{
             inp_device_host.second,
@@ -305,12 +304,13 @@ std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOp
             wk_device_host.second,
             wq_device_host.second,
             wv_device_host.second,
-            new_batch_idx_host,
+            new_batch_idx_device_host.second,
             kt_cache_device_host.second,
             v_cache_device_host.second,
             q_output_device_host.second,
             qkt_output_device_host.second,
-            attention_result_device_host.second
+            attention_result_device_host.second,
+            n_new_batches
         });
 }
 
@@ -479,9 +479,9 @@ void self_attention_inference_host(const TensorFloat& inp, const TensorInt& leng
     const TensorFloat& wv,
     const TensorInt& new_batch_idx, TensorFloat& kt_cache, TensorFloat& v_cache,
     // avoid frequent creation of tensors
-    TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result) {
+    TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result, int n_new_batch) {
 
-    fill_new_kt_v_cache(inp, new_batch_idx, lengths, wk, wv, kt_cache, v_cache);
+    fill_new_kt_v_cache(inp, new_batch_idx, lengths, wk, wv, kt_cache, v_cache, n_new_batch);
 
     get_latest_kt_q_v(inp, lengths, wk, wq, wv, kt_cache, v_cache, q_output);
 

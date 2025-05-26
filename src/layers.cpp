@@ -46,3 +46,20 @@ void FeedForward::forward(const TensorFloat& input, TensorFloat& output) {
         1, n_batch, in_features, out_features
     );
 }
+
+SelfAttentionLayer::SelfAttentionLayer(TensorFloat&& wk, TensorFloat&& wq, TensorFloat&& wv,
+    size_t n_batch, size_t input_dim, size_t n_sequence): wk_(std::move(wk)), wq_(std::move(wq)), wv_(std::move(wv)),
+    kt_cache_(TensorFloat({n_batch, input_dim, n_sequence}, DeviceType::DEVICE)),
+    v_cache_(TensorFloat({n_batch, n_sequence, input_dim}, DeviceType::DEVICE)),
+    q_output_({n_batch, input_dim}, DeviceType::DEVICE),
+    qkt_output_({n_batch, n_sequence}, DeviceType::DEVICE) { }
+
+
+void SelfAttentionLayer::forward(const TensorFloat& inp_embedding, const TensorInt& lengths,
+    const TensorInt& new_batch_idx, TensorFloat& attention_result, int n_new_items) {
+    
+    inference_self_attention(inp_embedding, lengths, wk_, wq_, wv_, new_batch_idx, kt_cache_,
+        v_cache_, q_output_, qkt_output_, attention_result, n_new_items);
+}
+
+

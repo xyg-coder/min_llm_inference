@@ -20,6 +20,7 @@ public:
     TensorFloat q_output;
     TensorFloat qkt_output;
     TensorFloat attention_result;
+    int n_new_batches;
 };
 
 std::pair<TensorFloat, TensorFloat> get_random_device_host_tensor(const std::vector<size_t>& shape, float ratio = 1);

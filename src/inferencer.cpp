@@ -5,11 +5,9 @@
 #include <vector>
 
 
-void start_inference_engine(
-    const TensorFloat& emb_table, const TensorFloat& pos_table,
+void start_inference_engine(const TensorFloat& emb_table, const TensorFloat& pos_table,
     ItemStorage& item_storage, ProcessingStorage& processing_storage,
-    InferenceModel& inference_model,
-    size_t n_batch_size, size_t n_sequence) {
+    InferenceModel& inference_model, size_t n_batch_size, size_t n_sequence) {
 
     std::vector<int> finished_indices;
     for (int i = 0; i < n_batch_size; ++i) {

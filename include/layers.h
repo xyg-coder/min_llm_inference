@@ -17,16 +17,17 @@ private:
 
 class SelfAttentionLayer : public NonCopyableNonClonable {
 public:
-    SelfAttentionLayer(const TensorFloat& wk, const TensorFloat& wq, const TensorFloat& wv);
-    void forward(const TensorFloat& inp, const TensorInt& lengths,
-        const TensorInt& new_batch_idx, TensorFloat& attention_result);
+    SelfAttentionLayer(TensorFloat& wk, TensorFloat& wq, TensorFloat& wv,
+        size_t n_batch, size_t input_dim, size_t n_sequence);
+    void forward(const TensorFloat& inp_embedding, const TensorInt& lengths,
+        const TensorInt& new_batch_idx, TensorFloat& attention_result, int n_new_items);
 private:
-    TensorFloat wk;
-    TensorFloat wq;
-    TensorFloat wv;
-    TensorFloat kt_cache;
-    TensorFloat v_cache;
+    TensorFloat wk_;
+    TensorFloat wq_;
+    TensorFloat wv_;
     // pre-allocated memories
+    TensorFloat kt_cache_;
+    TensorFloat v_cache_;
     TensorFloat q_output_;
     TensorFloat qkt_output_;
 };
@@ -36,7 +37,7 @@ private:
  * emb_table: [n_vocab, inputDim]
  * wpe: [n_sequence, inputDim]
  * inp: [n_batch, n_sequence]
- * output: [n_batch, n_sequence, inputDim]
+ * inp_embedding: [n_batch, n_sequence, inputDim]
  * lengths: [n_batch]
  * new_item_indices: [n_new_items]
  */
@@ -44,7 +45,7 @@ class EncoderLayer : public NonCopyableNonClonable {
 public:
     void forward(
         const TensorFloat& emb_table, const TensorFloat& pos_emb, const TensorInt& inp,
-        TensorFloat& output, const TensorInt& lengths,
+        TensorFloat& inp_embedding, const TensorInt& lengths,
         const TensorInt& new_item_indices);
 };
 
