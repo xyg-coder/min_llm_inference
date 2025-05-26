@@ -23,7 +23,7 @@ void start_inference_engine(
     TensorInt new_items_indices_host({n_batch_size}, DeviceType::HOST);
     insert_new_items(
         finished_indices, inp_device, inp_host, lengths_device,
-        lengths_host, new_items_indices_device, new_items_indices_host, item_storage);
+        lengths_host, new_items_indices_device, new_items_indices_host, item_storage, processing_storage);
     TensorInt decoder_result_device({n_batch_size}, DeviceType::DEVICE);
     TensorInt decoder_result_host({n_batch_size}, DeviceType::HOST);
     
@@ -33,7 +33,7 @@ void start_inference_engine(
             decoder_result_device, decoder_result_host, item_storage, processing_storage, n_sequence);
         insert_new_items(
             finished_indices, inp_device, inp_host, lengths_device,
-            lengths_host, new_items_indices_device, new_items_indices_host, item_storage);
+            lengths_host, new_items_indices_device, new_items_indices_host, item_storage, processing_storage);
     }
 
 }

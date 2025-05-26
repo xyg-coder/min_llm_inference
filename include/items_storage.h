@@ -3,6 +3,7 @@
 #include "tensor.hpp"
 #include "utils.h"
 #include <list>
+#include <unordered_map>
 #include <vector>
 
 using IdTokensPair = std::pair<int, std::vector<int>>;
@@ -12,7 +13,7 @@ class Storage : public NonCopyableNonClonable {
 public:
     Storage() = default;
     std::vector<IdTokensPair> pop_pairs(int size);
-    void add(const std::vector<IdTokensPair>&);
+    void add(IdTokensPair&&);
     int size() const;
 private:
     std::list<IdTokensPair> data_;
@@ -26,8 +27,8 @@ public:
     std::vector<IdTokensPair> pop_finished_items(int size);
     // return at most size new items
     std::vector<IdTokensPair> pop_new_items(int size);
-    void add_finished_items(const std::vector<IdTokensPair>&);
-    void add_new_items(const std::vector<IdTokensPair>&);
+    void add_finished_item(IdTokensPair&&);
+    void add_new_item(IdTokensPair&&);
     int finish_count() const;
 private:
     Storage finished_items_;
@@ -38,10 +39,14 @@ private:
 class ProcessingStorage : public NonCopyableNonClonable {
 public:
     ProcessingStorage() = default;
-    std::vector<IdTokensPair>& get_processing_items();
+    void put(int batch_id, IdTokensPair&&);
+    void remove(int batch_id);
+    bool batch_id_processing(int batch_id);
+    IdTokensPair& get_token(int batch_id);
+    void move_to_finished(int batch_id, ItemStorage& item_storage);
+    int size() const;
 private:
-    // processing_items_has size [n_batch]
-    std::vector<IdTokensPair> processing_items_;
+    std::unordered_map<int, IdTokensPair> batch_id_to_token_pairs_;
 };
 
 
@@ -66,7 +71,7 @@ void insert_new_items(
     TensorInt& inp_device, TensorInt& inp_host,
     TensorInt& lengths_device, TensorInt& lengths_host,
     TensorInt& new_items_indices_device, TensorInt& new_items_indices_host,
-    ItemStorage& item_storage);
+    ItemStorage& item_storage, ProcessingStorage& processing_storage);
     
 
 bool is_done(ItemStorage& item_storage, ProcessingStorage& processing_storage);
