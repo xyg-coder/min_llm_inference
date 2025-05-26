@@ -2,6 +2,9 @@
 #include "layers.h"
 #include <stdexcept>
 #include "kernels/gemm.h"
+#include "kernels/self_attention_inference_optimized.h"
+#include "kernels/decoder.h"
+#include "kernels/encoder.h"
 
 FeedForward::FeedForward(const TensorFloat& w, std::optional<const TensorFloat> b): weight_(w), bias_(std::move(b)) {
     auto weight_shape = weight_.shape();
@@ -62,4 +65,24 @@ void SelfAttentionLayer::forward(const TensorFloat& inp_embedding, const TensorI
         v_cache_, q_output_, qkt_output_, attention_result, n_new_items);
 }
 
+void EncoderLayer::forward(const TensorFloat& emb_table, const TensorFloat& pos_emb, const TensorInt& inp,
+    TensorFloat& inp_embedding, const TensorInt& lengths,
+    const TensorInt& new_item_indices, int n_new_items) {
 
+    int n_batch = inp.shape()[0];
+    int n_sequence = inp.shape()[1];
+    int embedding_dim = inp.shape()[2];
+
+    launch_inference_optimized_encoder_kernel(
+        emb_table.data(), pos_emb.data(), inp.data(), inp_embedding.data(),
+        lengths.data(), new_item_indices.data(), n_batch, n_sequence, embedding_dim, n_new_items);
+}
+
+DecoderLayer::DecoderLayer(size_t n_batch, size_t n_vocab): emb_score_(TensorFloat({n_batch, n_vocab}, DeviceType::DEVICE)) { }
+
+void DecoderLayer::forward(const TensorFloat& batch_result, const TensorFloat& emb_table,
+    const TensorFloat& wpe_table,
+    TensorFloat& inp_embedding, TensorInt& lengths, TensorInt& decoder_result) {
+
+    launch_decoder(batch_result, emb_table, emb_score_, wpe_table, inp_embedding, lengths, decoder_result);
+}

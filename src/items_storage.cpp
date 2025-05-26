@@ -97,7 +97,7 @@ std::vector<int> process_decoder_result(
     return finished_indices;
 }
 
-void insert_new_items(
+int insert_new_items(
     const std::vector<int>& finished_indices, 
     TensorInt& inp_device, TensorInt& inp_host,
     TensorInt& lengths_device, TensorInt& lengths_host,
@@ -105,7 +105,7 @@ void insert_new_items(
     ItemStorage& item_storage, ProcessingStorage& processing_storage) {
     
     if (finished_indices.empty()) {
-        return;
+        return 0;
     }
     
     std::vector<IdTokensPair> new_item_pairs = item_storage.pop_new_items(finished_indices.size());
@@ -133,6 +133,8 @@ void insert_new_items(
     inp_device.copy_from(inp_host);
     lengths_device.copy_from(lengths_host);
     new_items_indices_device.copy_from(new_items_indices_host);
+
+    return new_item_pairs.size();
 }
 
 int ProcessingStorage::size() const {

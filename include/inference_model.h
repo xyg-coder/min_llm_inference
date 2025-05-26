@@ -13,7 +13,7 @@ public:
         const TensorFloat& emb_table,
         const TensorFloat& pos_table);
 
-    void forward(const TensorInt& inp, TensorInt& lengths, const TensorInt& new_item_indices, TensorInt& decoder_result);
+    void forward(const TensorInt& inp, TensorInt& lengths, const TensorInt& new_item_indices, TensorInt& decoder_result, int n_new_items);
 private:
     SelfAttentionLayer attention_layer_;
     EncoderLayer encoder_layer_;
@@ -23,6 +23,6 @@ private:
     int n_batch_;
     int n_sequence_;
     int emb_dim_;
-    TensorFloat batch_embs_;
+    TensorFloat inp_embedding_;
     TensorFloat attention_result_;
 };

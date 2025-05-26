@@ -78,12 +78,12 @@ __global__ void inference_optimized_encoder(
 
 
 void launch_inference_optimized_encoder_kernel(
-    const float* emb_table, const float* wpe, const int* inp, float* output, const int* lengths,
+    const float* emb_table, const float* wpe, const int* inp, float* inp_embedding, const int* lengths,
     const int* new_item_indices,
     int batch_size, int n_sequence, int embedding_dim, int n_new_items) {
 
     assert(embedding_dim % 4 == 0);
     dim3 gridDim(ceil_div(embedding_dim / 4, BLOCK_DIM), n_sequence, n_new_items);
-    inference_optimized_encoder<<<gridDim, BLOCK_DIM>>>(emb_table, wpe, inp, output, lengths, new_item_indices, batch_size, n_sequence, embedding_dim, n_new_items);
+    inference_optimized_encoder<<<gridDim, BLOCK_DIM>>>(emb_table, wpe, inp, inp_embedding, lengths, new_item_indices, batch_size, n_sequence, embedding_dim, n_new_items);
     CUDA_CHECK_LAST();
 }

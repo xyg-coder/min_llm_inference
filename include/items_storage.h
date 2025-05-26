@@ -64,9 +64,9 @@ std::vector<int> process_decoder_result(
  * 1. fetch new_items with finished_indices.size()
  * 2. fill new_tokens and new_lengths. Note, we have to fill n_finished_items even there isn't enough new_items. But padding it with length==0
  * 
- *  After this step, we are ready to call encoder
+ *  return n_new_items
  */
-void insert_new_items(
+int insert_new_items(
     const std::vector<int>& finished_indices, 
     TensorInt& inp_device, TensorInt& inp_host,
     TensorInt& lengths_device, TensorInt& lengths_host,

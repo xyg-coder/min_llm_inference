@@ -1,6 +1,7 @@
 #include "constants.h"
 #include "items_storage.h"
 #include "test_utils.h"
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <utility>
 #include <vector>
@@ -90,10 +91,11 @@ TEST(ItemStorageTest, InsertNewItemsWithEnoughNewItemsTest) {
     auto lengths_device_host = get_random_device_host_tensor_int({n_batch}, n_sequence);
     auto new_items_indices_device_host = get_random_device_host_tensor_int({n_batch}, n_batch - 1);
 
-    insert_new_items(finished_indices_result,
+    int n_new_items = insert_new_items(finished_indices_result,
         inp_device_host.first, inp_device_host.second,
         lengths_device_host.first, lengths_device_host.second,
         new_items_indices_device_host.first, new_items_indices_device_host.second, item_storage, processing_storage);
+    ASSERT_EQ(n_new_items, std::min((int)finished_indices_result.size(), n_finishes));
     
     inp_device_host.second.copy_from(inp_device_host.first);
     lengths_device_host.second.copy_from(lengths_device_host.first);
@@ -156,10 +158,11 @@ TEST(ItemStorageTest, InsertNewItemsWithoutEnoughNewItemsTest) {
     auto lengths_device_host = get_random_device_host_tensor_int({n_batch}, n_sequence);
     auto new_items_indices_device_host = get_random_device_host_tensor_int({n_batch}, n_batch - 1);
 
-    insert_new_items(finished_indices_result,
+    int n_new_items_result = insert_new_items(finished_indices_result,
         inp_device_host.first, inp_device_host.second,
         lengths_device_host.first, lengths_device_host.second,
         new_items_indices_device_host.first, new_items_indices_device_host.second, item_storage, processing_storage);
+    ASSERT_EQ(n_new_items_result, n_new_items);
     
     inp_device_host.second.copy_from(inp_device_host.first);
     lengths_device_host.second.copy_from(lengths_device_host.first);

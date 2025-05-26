@@ -11,7 +11,7 @@
  * emb_score: [n_batch, n_vocab]
  * decoder_result: [n_batch]
  * lengths: [n_batch]
- * inp: [n_batch, n_sequence, input_dim]
+ * inp_embedding: [n_batch, n_sequence, input_dim]
  * wpe_table: [n_sequence, input_dim]
  * emb_table: [n_vocab, input_dim]
  *
@@ -22,7 +22,7 @@
  */
 __global__ void decoder_kernel(
     const float* emb_score, int* decoder_result,
-    int* lengths, float* inp, const float* wpe_table,
+    int* lengths, float* inp_embedding, const float* wpe_table,
     const float* emb_table,
     int n_batch, int n_vocab, int n_sequence, int input_dim) {
 
@@ -79,7 +79,7 @@ __global__ void decoder_kernel(
 
     const float4* emb_4 = reinterpret_cast<const float4*>(emb_table + max_index[0] * input_dim);
     const float4* wpe_4 = reinterpret_cast<const float4*>(wpe_table + cur_length * input_dim);
-    float4* output_4 = reinterpret_cast<float4*>(inp + i_batch * n_sequence * input_dim + cur_length * input_dim);
+    float4* output_4 = reinterpret_cast<float4*>(inp_embedding + i_batch * n_sequence * input_dim + cur_length * input_dim);
     for (int i = idx; i < embedding_dim_4; i += BLOCK_DIM) {
         output_4[i] = float4_add(emb_4[i], wpe_4[i]);
     }
@@ -87,21 +87,21 @@ __global__ void decoder_kernel(
 
 
 void launch_decoder(
-    const TensorFloat& batch_embs, const TensorFloat& emb_table,
+    const TensorFloat& batch_result, const TensorFloat& emb_table,
     TensorFloat& emb_score,
     const TensorFloat& wpe_table,
-    TensorFloat& inp, TensorInt& lengths, TensorInt& decoder_result) {
+    TensorFloat& inp_embedding, TensorInt& lengths, TensorInt& decoder_result) {
 
-    int batch_size = batch_embs.shape()[0];
-    int emb_dim = batch_embs.shape()[1];
+    int batch_size = batch_result.shape()[0];
+    int emb_dim = batch_result.shape()[1];
     int n_vocab = emb_table.shape()[0];
     int n_sequence = wpe_table.shape()[0];
 
     launch_gemm_transpose_kernel(
-        batch_embs.data(), emb_table.data(), emb_score.data(), 1, batch_size, n_vocab, emb_dim);
+        batch_result.data(), emb_table.data(), emb_score.data(), 1, batch_size, n_vocab, emb_dim);
 
     dim3 gridDim(1, batch_size);
-    decoder_kernel<<<gridDim, BLOCK_DIM>>>(emb_score.data(), decoder_result.data(), lengths.data(), inp.data(), wpe_table.data(),
+    decoder_kernel<<<gridDim, BLOCK_DIM>>>(emb_score.data(), decoder_result.data(), lengths.data(), inp_embedding.data(), wpe_table.data(),
         emb_table.data(), batch_size, n_vocab, n_sequence, emb_dim);
     CUDA_CHECK_LAST();
 }

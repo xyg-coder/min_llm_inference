@@ -17,7 +17,7 @@ private:
 
 class SelfAttentionLayer : public NonCopyableNonClonable {
 public:
-    SelfAttentionLayer(TensorFloat& wk, TensorFloat& wq, TensorFloat& wv,
+    SelfAttentionLayer(TensorFloat&& wk, TensorFloat&& wq, TensorFloat&& wv,
         size_t n_batch, size_t input_dim, size_t n_sequence);
     void forward(const TensorFloat& inp_embedding, const TensorInt& lengths,
         const TensorInt& new_batch_idx, TensorFloat& attention_result, int n_new_items);
@@ -46,23 +46,24 @@ public:
     void forward(
         const TensorFloat& emb_table, const TensorFloat& pos_emb, const TensorInt& inp,
         TensorFloat& inp_embedding, const TensorInt& lengths,
-        const TensorInt& new_item_indices);
+        const TensorInt& new_item_indices, int n_new_items);
 };
 
 /**
- * batch_embs: [n_batch, input_dim]
+ * batch_result: [n_batch, input_dim]
  * emb_table: [n_vocab, input_dim]
  * emb_score: [n_batch, n_vocab]
- * inp: [n_batch, n_sequence, input_dim]
+ * inp_embedding: [n_batch, n_sequence, input_dim]
  * lengths: [n_batch]
  * decoder_result: [n_batch]
  */
 class DecoderLayer : public NonCopyableNonClonable {
 public:
+    DecoderLayer(size_t n_batch, size_t n_vocab);
     void forward(
-        const TensorFloat& batch_embs, const TensorFloat& emb_table,
+        const TensorFloat& batch_result, const TensorFloat& emb_table,
         const TensorFloat& wpe_table,
-        TensorFloat& inp, TensorInt& lengths, TensorInt& decoder_result);
+        TensorFloat& inp_embedding, TensorInt& lengths, TensorInt& decoder_result);
 private:
     TensorFloat emb_score_;
 };
