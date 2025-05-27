@@ -49,6 +49,5 @@ make # build and run tests
 
 ## Plan
 
+* Learn the way to profile and benchmark.
 * How to use multi-gpus to accelerate
-* self_attention test is flaky (seems cudaMalloc failure).
-* Change the design from pdf to readme
