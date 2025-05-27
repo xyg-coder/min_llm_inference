@@ -1,8 +1,11 @@
 #include "test_utils.h"
 #include "constants.h"
 #include "include/test_utils.h"
+#include "inference_model.h"
 #include "kernels/rand_assign.h"
 #include "kernels/utils.cuh"
+#include "layers.h"
+#include "items_storage.h"
 #include "tensor.hpp"
 #include <algorithm>
 #include <cassert>
@@ -74,6 +77,13 @@ std::pair<TensorFloat, TensorFloat> get_random_device_host_tensor(const std::vec
     launch_randn_kernel(device_tensor.data(), total_size, ratio);
     host_tensor.copy_from(device_tensor);
     return std::make_pair(device_tensor, host_tensor);
+}
+
+TensorFloat get_random_device_tensor(const std::vector<size_t> &shape, float ratio) {
+    TensorFloat device_tensor(shape, DeviceType::DEVICE);
+    size_t total_size = device_tensor.get_total_size();
+    launch_randn_kernel(device_tensor.data(), total_size, ratio);
+    return device_tensor;
 }
 
 std::pair<TensorInt, TensorInt> get_random_device_host_tensor_int(const std::vector<size_t>& shape, int max_val) {

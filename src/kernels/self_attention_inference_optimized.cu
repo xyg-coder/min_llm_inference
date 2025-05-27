@@ -232,7 +232,7 @@ __global__ void softmax_in_place_with_lengths(
                 temp[j] = 0.0f;
             }
         }
-        out_vec[i] = *reinterpret_cast<float4*>(temp);
+        out_vec[i] = float4({temp[0], temp[1], temp[2], temp[3]});
     }
 }
 
@@ -297,6 +297,10 @@ void launch_fill_new_kt_v_cache(
     const TensorFloat& inp_embedding, const TensorInt& new_batch_idx, const TensorInt& lengths,
     const TensorFloat& wk, const TensorFloat& wv, TensorFloat& kt_cache,
     TensorFloat& v_cache, int n_new_items) {
+    
+    if (n_new_items == 0) {
+        return;
+    }
     
     int n_batch = inp_embedding.shape()[0];
     int n_sequence = inp_embedding.shape()[1];

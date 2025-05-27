@@ -14,7 +14,7 @@ void start_inference_engine(const TensorFloat& emb_table, const TensorFloat& pos
         finished_indices.push_back(i);
     }
     TensorInt inp_device({n_batch_size, n_sequence}, DeviceType::DEVICE);
-    TensorInt inp_host({n_batch_size, n_sequence}, DeviceType::DEVICE);
+    TensorInt inp_host({n_batch_size, n_sequence}, DeviceType::HOST);
     TensorInt lengths_device({n_batch_size}, DeviceType::DEVICE);
     TensorInt lengths_host({n_batch_size}, DeviceType::HOST);
     TensorInt new_items_indices_device({n_batch_size}, DeviceType::DEVICE);
@@ -27,6 +27,7 @@ void start_inference_engine(const TensorFloat& emb_table, const TensorFloat& pos
     
     while (!is_done(item_storage, processing_storage)) {
         inference_model.forward(inp_device, lengths_device, new_items_indices_device, decoder_result_device, n_new_items);
+
         finished_indices = process_decoder_result(
             decoder_result_device, decoder_result_host, item_storage, processing_storage, n_sequence);
         n_new_items = insert_new_items(

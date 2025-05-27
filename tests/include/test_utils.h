@@ -1,8 +1,6 @@
 
 #pragma once
 
-#include "inference_model.h"
-#include "items_storage.h"
 #include "tensor.hpp"
 #include <utility>
 #include <vector>
@@ -24,6 +22,7 @@ public:
 };
 
 std::pair<TensorFloat, TensorFloat> get_random_device_host_tensor(const std::vector<size_t>& shape, float ratio = 1);
+TensorFloat get_random_device_tensor(const std::vector<size_t>& shape, float ratio = 1);
 
 std::pair<TensorInt, TensorInt> get_random_device_host_tensor_int(const std::vector<size_t>& shape, int max_val);
 
@@ -69,14 +68,3 @@ void decoder_host(
 TensorFloat mock_emb_table(int n_vocab, int embedding_dims);
 
 TensorFloat mock_pos_table(int n_sequence, int embedding_dims);
-
-class WrappersForInferencerTest {
-public:
-    TensorFloat emb_table;
-    TensorFloat pos_table;
-    ItemStorage item_storage;
-    ProcessingStorage processing_storage;
-    InferenceModel inference_model;
-};
-
-WrappersForInferencerTest generate_wrappers_for_inference_test();

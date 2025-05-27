@@ -69,9 +69,9 @@ void EncoderLayer::forward(const TensorFloat& emb_table, const TensorFloat& pos_
     TensorFloat& inp_embedding, const TensorInt& lengths,
     const TensorInt& new_item_indices, int n_new_items) {
 
-    int n_batch = inp.shape()[0];
-    int n_sequence = inp.shape()[1];
-    int embedding_dim = inp.shape()[2];
+    int n_batch = inp_embedding.shape()[0];
+    int n_sequence = inp_embedding.shape()[1];
+    int embedding_dim = inp_embedding.shape()[2];
 
     launch_inference_optimized_encoder_kernel(
         emb_table.data(), pos_emb.data(), inp.data(), inp_embedding.data(),

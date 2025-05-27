@@ -30,6 +30,7 @@ public:
     void add_finished_item(IdTokensPair&&);
     void add_new_item(IdTokensPair&&);
     int finish_count() const;
+    int new_count() const;
 private:
     Storage finished_items_;
     Storage new_items_; 

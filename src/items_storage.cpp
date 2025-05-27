@@ -1,6 +1,8 @@
 #include "items_storage.h"
 #include "constants.h"
 #include <cassert>
+#include <iostream>
+#include <ostream>
 #include <utility>
 #include <vector>
 
@@ -30,6 +32,10 @@ void ItemStorage::add_new_item(IdTokensPair&& new_item) {
 
 int ItemStorage::finish_count() const {
     return finished_items_.size();
+}
+
+int ItemStorage::new_count() const {
+    return new_items_.size();
 }
 
 std::vector<IdTokensPair> Storage::pop_pairs(int size) {
@@ -77,7 +83,6 @@ std::vector<int> process_decoder_result(
     decoder_result_host.copy_from(decoder_result_device);
     const int* decode_result_data = decoder_result_host.data();
     std::vector<int> finished_indices;
-    std::vector<IdTokensPair> to_move_to_finished;
     for (int i = 0; i < decoder_result_host.shape()[0]; ++i) {
         if (decode_result_data[i] == EMPTY_ROW_TOKEN_ID) {
             assert(!processing_storage.batch_id_processing(i));
@@ -139,4 +144,8 @@ int insert_new_items(
 
 int ProcessingStorage::size() const {
     return batch_id_to_token_pairs_.size();
+}
+
+bool is_done(ItemStorage& item_storage, ProcessingStorage& processing_storage) {
+    return processing_storage.size() + item_storage.new_count() == 0;
 }

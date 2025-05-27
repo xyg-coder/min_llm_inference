@@ -81,6 +81,9 @@ void launch_inference_optimized_encoder_kernel(
     const float* emb_table, const float* wpe, const int* inp, float* inp_embedding, const int* lengths,
     const int* new_item_indices,
     int batch_size, int n_sequence, int embedding_dim, int n_new_items) {
+    if (n_new_items == 0) {
+        return;
+    }
 
     assert(embedding_dim % 4 == 0);
     dim3 gridDim(ceil_div(embedding_dim / 4, BLOCK_DIM), n_sequence, n_new_items);
