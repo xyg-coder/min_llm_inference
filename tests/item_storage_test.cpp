@@ -73,7 +73,7 @@ TEST(ItemStorageTest, InsertNewItemsWithEnoughNewItemsTest) {
         if (i < n_finish_due_to_tokens) {
             decoder_host_data[finish_indices[i]] = EOF_TOKEN_ID;
         } else { 
-            processing_storage.put(finish_indices[i], std::make_pair(finish_indices[i], create_random_vector(get_random_number(1, n_sequence - 3), 0, EOF_TOKEN_ID - 1)));
+            processing_storage.put(finish_indices[i], std::make_pair(finish_indices[i], create_random_vector(n_sequence - 1, 0, EOF_TOKEN_ID - 1)));
         }
     }
     decoder_result_device_host.first.copy_from(decoder_result_device_host.second);
@@ -139,7 +139,7 @@ TEST(ItemStorageTest, InsertNewItemsWithoutEnoughNewItemsTest) {
         if (i < n_finish_due_to_tokens) {
             decoder_host_data[finish_indices[i]] = EOF_TOKEN_ID;
         } else { 
-            processing_storage.put(finish_indices[i], std::make_pair(finish_indices[i], create_random_vector(get_random_number(1, n_sequence - 3), 0, EOF_TOKEN_ID - 1)));
+            processing_storage.put(finish_indices[i], std::make_pair(finish_indices[i], create_random_vector(n_sequence - 1, 0, EOF_TOKEN_ID - 1)));
         }
     }
     decoder_result_device_host.first.copy_from(decoder_result_device_host.second);
