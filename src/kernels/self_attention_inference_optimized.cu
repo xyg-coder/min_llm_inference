@@ -11,7 +11,7 @@
 
 namespace cg = cooperative_groups;
 /**
- * inp: [n_batch, n_sequence, input_dim]
+ * inp_embedding: [n_batch, n_sequence, input_dim]
  * new_batch_idx: [n_new_batch]
  * lengths: [n_batch]
  * wk: [input_dim, output_dim]
@@ -25,7 +25,7 @@ namespace cg = cooperative_groups;
  * 2. if i_sequence < lenghs[batch_idx]: copy to to v_cache/k_cache
  */
 __global__ void fill_new_kt_v_cache(
-    const float* inp, const int* new_batch_idx,
+    const float* inp_embedding, const int* new_batch_idx,
     const int* lengths,
     const float* wk, const float* wv,
     float* kt_cache, float* v_cache,
@@ -45,7 +45,7 @@ __global__ void fill_new_kt_v_cache(
     }
     float k_result = 0;
     float v_result = 0;
-    const float* base_inp = inp + batch_idx * n_sequence * input_dim;
+    const float* base_inp = inp_embedding + batch_idx * n_sequence * input_dim;
     for (int i = 0; i < input_dim; i += TILE_SIZE) {
         if (output_row_idx < cur_batch_length && i + threadIdx.x < input_dim) {
             inp_shared[threadIdx.y][threadIdx.x] = base_inp[output_row_idx * input_dim + i + threadIdx.x];
@@ -88,7 +88,7 @@ __global__ void fill_new_kt_v_cache(
 
 
 /**
- * inp: [n_batch, n_sequence, input_dim]
+ * inp_embedding: [n_batch, n_sequence, input_dim]
  * lengths: [n_batch]
  * wq, wk, wv: [input_dim, output_dim]
  * v_cache: [n_batch, n_sequence, output_dim]
@@ -99,7 +99,7 @@ __global__ void fill_new_kt_v_cache(
  * 2. save to k_cache, v_cache and q_output
  */
 __global__ void get_latest_kt_q_v(
-    const float* inp, const int* lengths,
+    const float* inp_embedding, const int* lengths,
     const float* wk, const float* wq, const float* wv,
     float* kt_cache, float* v_cache,
     float* q_output,
@@ -116,7 +116,7 @@ __global__ void get_latest_kt_q_v(
     float k_result = 0;
     float q_result = 0;
     float v_result = 0;
-    const float* base_inp = inp + i_batch * n_sequence * input_dim + i_sequence * input_dim;
+    const float* base_inp = inp_embedding + i_batch * n_sequence * input_dim + i_sequence * input_dim;
 
     for (int i = 0; i < input_dim; i += TILE_SIZE_SQUARE) {
         if (i + threadIdx.x < input_dim) {
@@ -232,7 +232,7 @@ __global__ void softmax_in_place_with_lengths(
                 temp[j] = 0.0f;
             }
         }
-        out_vec[i] = *reinterpret_cast<float4*>(temp);
+        out_vec[i] = float4({temp[0], temp[1], temp[2], temp[3]});
     }
 }
 
@@ -273,17 +273,18 @@ __global__ void softmax_v(
 
 
 void inference_self_attention(
-    const TensorFloat& inp, const TensorInt& lengths,
+    const TensorFloat& inp_embedding, const TensorInt& lengths,
     const TensorFloat& wk,
     const TensorFloat& wq,
     const TensorFloat& wv,
     const TensorInt& new_batch_idx, TensorFloat& kt_cache, TensorFloat& v_cache,
     // avoid frequent creation of tensors
-    TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result) {
+    TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result,
+    int n_new_items) {
     
-    launch_fill_new_kt_v_cache(inp, new_batch_idx, lengths, wk, wv, kt_cache, v_cache);
+    launch_fill_new_kt_v_cache(inp_embedding, new_batch_idx, lengths, wk, wv, kt_cache, v_cache, n_new_items);
 
-    launch_get_latest_kt_q_v(inp, lengths, wk, wq, wv, kt_cache, v_cache, q_output);
+    launch_get_latest_kt_q_v(inp_embedding, lengths, wk, wq, wv, kt_cache, v_cache, q_output);
 
     launch_qkt(q_output, kt_cache, lengths, qkt_output);
 
@@ -293,38 +294,41 @@ void inference_self_attention(
 }
 
 void launch_fill_new_kt_v_cache(
-    const TensorFloat& inp, const TensorInt& new_batch_idx, const TensorInt& lengths,
+    const TensorFloat& inp_embedding, const TensorInt& new_batch_idx, const TensorInt& lengths,
     const TensorFloat& wk, const TensorFloat& wv, TensorFloat& kt_cache,
-    TensorFloat& v_cache) {
+    TensorFloat& v_cache, int n_new_items) {
     
-    int n_batch = inp.shape()[0];
-    int n_sequence = inp.shape()[1];
-    int input_dim = inp.shape()[2];
+    if (n_new_items == 0) {
+        return;
+    }
+    
+    int n_batch = inp_embedding.shape()[0];
+    int n_sequence = inp_embedding.shape()[1];
+    int input_dim = inp_embedding.shape()[2];
     int output_dim = wk.shape()[1];
-    int n_new_batch = new_batch_idx.shape()[0];
     dim3 blockDim(TILE_SIZE, TILE_SIZE);
     dim3 gridDim(
-        (output_dim + TILE_SIZE - 1) / TILE_SIZE, (n_sequence + TILE_SIZE - 1) / TILE_SIZE, n_new_batch);
+        (output_dim + TILE_SIZE - 1) / TILE_SIZE, (n_sequence + TILE_SIZE - 1) / TILE_SIZE, n_new_items);
     fill_new_kt_v_cache<<<gridDim, blockDim>>>(
-        inp.data(), new_batch_idx.data(), lengths.data(), wk.data(), wv.data(), kt_cache.data(),
+        inp_embedding.data(), new_batch_idx.data(), lengths.data(), wk.data(), wv.data(), kt_cache.data(),
         v_cache.data(), n_sequence, input_dim, output_dim);
     CUDA_CHECK_LAST();
 }
 
 void launch_get_latest_kt_q_v(
-    const TensorFloat& inp, const TensorInt& lengths,
+    const TensorFloat& inp_embedding, const TensorInt& lengths,
     const TensorFloat& wk, const TensorFloat& wq,
     const TensorFloat& wv, TensorFloat& kt_cache,
     TensorFloat& v_cache, TensorFloat& q_output) {
 
-    int n_batch = inp.shape()[0];
-    int n_sequence = inp.shape()[1];
-    int input_dim = inp.shape()[2];
+    int n_batch = inp_embedding.shape()[0];
+    int n_sequence = inp_embedding.shape()[1];
+    int input_dim = inp_embedding.shape()[2];
     int output_dim = wk.shape()[1];
 
     dim3 gridDim(ceil_div(output_dim, TILE_SIZE_SQUARE), n_batch);
     get_latest_kt_q_v<<<gridDim, TILE_SIZE_SQUARE>>>(
-        inp.data(), lengths.data(),
+        inp_embedding.data(), lengths.data(),
         wk.data(), wq.data(), wv.data(), kt_cache.data(),
         v_cache.data(), q_output.data(), n_batch,
         n_sequence, input_dim, output_dim);

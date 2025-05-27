@@ -15,7 +15,7 @@ TEST(InferenceOptimizedSelfAttentionTest, FillNewKtVCache) {
         device_tensors.wk,
         device_tensors.wv,
         device_tensors.kt_cache,
-        device_tensors.v_cache);
+        device_tensors.v_cache, device_tensors.n_new_batches);
     fill_new_kt_v_cache(
         host_tensors.inp,
         host_tensors.new_batch_idx,
@@ -23,7 +23,7 @@ TEST(InferenceOptimizedSelfAttentionTest, FillNewKtVCache) {
         host_tensors.wk,
         host_tensors.wv,
         host_tensors.kt_cache,
-        host_tensors.v_cache);
+        host_tensors.v_cache, host_tensors.n_new_batches);
     assert_near(device_tensors.kt_cache, host_tensors.kt_cache);
     assert_near(device_tensors.v_cache, host_tensors.v_cache);
 }
@@ -129,7 +129,7 @@ TEST(InferenceOptimizedSelfAttentionTest, InferenceOptimizedSelfAttentionTest) {
         device_tensors.v_cache,
         device_tensors.q_output,
         device_tensors.qkt_output,
-        device_tensors.attention_result);
+        device_tensors.attention_result, device_tensors.n_new_batches);
 
     self_attention_inference_host(
         host_tensors.inp,
@@ -142,7 +142,7 @@ TEST(InferenceOptimizedSelfAttentionTest, InferenceOptimizedSelfAttentionTest) {
         host_tensors.v_cache,
         host_tensors.q_output,
         host_tensors.qkt_output,
-        host_tensors.attention_result);
+        host_tensors.attention_result, host_tensors.n_new_batches);
     
     assert_near(device_tensors.attention_result, host_tensors.attention_result);
 }
@@ -171,7 +171,7 @@ TEST(InferenceOptimizedSelfAttentionTest, InferenceOptimizedSelfAttentionZeroLen
         device_tensors.v_cache,
         device_tensors.q_output,
         device_tensors.qkt_output,
-        device_tensors.attention_result);
+        device_tensors.attention_result, device_tensors.n_new_batches);
 
     self_attention_inference_host(
         host_tensors.inp,
@@ -184,7 +184,7 @@ TEST(InferenceOptimizedSelfAttentionTest, InferenceOptimizedSelfAttentionZeroLen
         host_tensors.v_cache,
         host_tensors.q_output,
         host_tensors.qkt_output,
-        host_tensors.attention_result);
+        host_tensors.attention_result, host_tensors.n_new_batches);
     
     assert_near(device_tensors.attention_result, host_tensors.attention_result);
 }

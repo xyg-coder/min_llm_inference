@@ -1,13 +1,12 @@
-#include "feed_forward.h"
-#include "model.h"
+#include "layers.h"
 #include "tensor.hpp"
 #include "test_utils.h"
 #include <gtest/gtest.h>
 
 TEST(FeedForwardLayerTest, FeedForwardTest) {
-    size_t batch_size = 1024;
-    size_t in_features = 1024;
-    size_t out_features = 1024;
+    size_t batch_size = get_random_number(1, 1024);
+    size_t in_features = get_random_number(1, 1024);
+    size_t out_features = get_random_number(1, 1024);
 
     auto weights = get_random_device_host_tensor({in_features, out_features});
     TensorFloat weights_device = weights.first;
@@ -25,9 +24,10 @@ TEST(FeedForwardLayerTest, FeedForwardTest) {
 
     FeedForward layer(std::move(weights_device), std::move(bias_device));
 
-    auto output_tensor = layer.forward(inputs_device);
+    TensorFloat output_d({batch_size, out_features}, DeviceType::DEVICE);
 
-    const TensorFloat& output_d = std::get<TensorFloat>(output_tensor);
+    layer.forward(inputs_device, output_d);
+
     output.copy_from(output_d);
     float* output_data = output.data();
     float* input_host_data = inputs_host.data();
@@ -47,9 +47,9 @@ TEST(FeedForwardLayerTest, FeedForwardTest) {
 }
 
 TEST(FeedForwardLayerTest, FeedForwardNoBiasTest) {
-    size_t batch_size = 1024;
-    size_t in_features = 1024;
-    size_t out_features = 1024;
+    size_t batch_size = get_random_number(1, 1024);
+    size_t in_features = get_random_number(1, 1024);
+    size_t out_features = get_random_number(1, 1024);
 
     auto weights = get_random_device_host_tensor({in_features, out_features});
     TensorFloat weights_device = weights.first;
@@ -64,11 +64,11 @@ TEST(FeedForwardLayerTest, FeedForwardNoBiasTest) {
     TensorFloat bias_host = bias.second;
 
     FeedForward layer(std::move(weights_device));
+    TensorFloat output_d({batch_size, out_features}, DeviceType::DEVICE);
 
-    auto output_tensor = layer.forward(inputs_device);
+    layer.forward(inputs_device, output_d);
 
     TensorFloat output({batch_size, out_features}, DeviceType::HOST);
-    const TensorFloat& output_d = std::get<TensorFloat>(output_tensor);
     output.copy_from(output_d);
     float* input_host_data = inputs_host.data();
     float* weight_host_data = weights_host.data();

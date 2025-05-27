@@ -18,9 +18,11 @@ public:
     TensorFloat q_output;
     TensorFloat qkt_output;
     TensorFloat attention_result;
+    int n_new_batches;
 };
 
 std::pair<TensorFloat, TensorFloat> get_random_device_host_tensor(const std::vector<size_t>& shape, float ratio = 1);
+TensorFloat get_random_device_tensor(const std::vector<size_t>& shape, float ratio = 1);
 
 std::pair<TensorInt, TensorInt> get_random_device_host_tensor_int(const std::vector<size_t>& shape, int max_val);
 
@@ -43,6 +45,8 @@ int get_random_number(int min, int max);
 
 std::vector<int> get_unique_num_array(int min, int max, int size);
 
+std::vector<int> create_random_vector(size_t size, int min, int max);
+
 std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOptimizedSelfAttention> generate_device_and_host_tensors(
     size_t n_batch=1024, size_t n_sequence=1024, size_t input_dim=32, size_t output_dim=32);
 
@@ -60,3 +64,7 @@ void decoder_host(
     TensorFloat& emb_score,
     const TensorFloat& wpe_table,
     TensorFloat& inp, TensorInt& lengths, TensorInt& decoder_result);
+
+TensorFloat mock_emb_table(int n_vocab, int embedding_dims);
+
+TensorFloat mock_pos_table(int n_sequence, int embedding_dims);

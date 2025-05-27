@@ -1,8 +1,11 @@
 #include "test_utils.h"
 #include "constants.h"
 #include "include/test_utils.h"
+#include "inference_model.h"
 #include "kernels/rand_assign.h"
 #include "kernels/utils.cuh"
+#include "layers.h"
+#include "items_storage.h"
 #include "tensor.hpp"
 #include <algorithm>
 #include <cassert>
@@ -28,13 +31,12 @@
 void fill_new_kt_v_cache(
     const TensorFloat& inp, const TensorInt& new_batch_idx, const TensorInt& lengths,
     const TensorFloat& wk, const TensorFloat& wv, TensorFloat& kt_cache,
-    TensorFloat& v_cache) {
+    TensorFloat& v_cache, int n_new_batch) {
 
     int n_batch = inp.shape()[0];
     int n_sequence = inp.shape()[1];
     int input_dim = inp.shape()[2];
     int output_dim = wk.shape()[1];
-    int n_new_batch = new_batch_idx.shape()[0];
     
     const float* inp_data = inp.data();
     const int* new_batch_idx_data = new_batch_idx.data();
@@ -66,7 +68,7 @@ void fill_new_kt_v_cache(
 }
 
 std::pair<TensorFloat, TensorFloat> get_random_device_host_tensor(const std::vector<size_t> &shape, float ratio) {
-    TensorFloat device_tensor(shape, DeviceType::DEVICE);    
+    TensorFloat device_tensor(shape, DeviceType::DEVICE);
     TensorFloat host_tensor(shape, DeviceType::HOST);
     size_t total_size = 1;
     for (size_t dim : shape) {
@@ -75,6 +77,13 @@ std::pair<TensorFloat, TensorFloat> get_random_device_host_tensor(const std::vec
     launch_randn_kernel(device_tensor.data(), total_size, ratio);
     host_tensor.copy_from(device_tensor);
     return std::make_pair(device_tensor, host_tensor);
+}
+
+TensorFloat get_random_device_tensor(const std::vector<size_t> &shape, float ratio) {
+    TensorFloat device_tensor(shape, DeviceType::DEVICE);
+    size_t total_size = device_tensor.get_total_size();
+    launch_randn_kernel(device_tensor.data(), total_size, ratio);
+    return device_tensor;
 }
 
 std::pair<TensorInt, TensorInt> get_random_device_host_tensor_int(const std::vector<size_t>& shape, int max_val) {
@@ -253,20 +262,31 @@ std::vector<int> get_unique_num_array(int min, int max, int size) {
     return result;
 }
 
+std::vector<int> create_random_vector(size_t size, int min, int max) {
+    std::vector<int> v(size);
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> distrib(min, max); // Range [0,99]
+
+    for (auto& elem : v) {
+        elem = distrib(gen);
+    }
+    return v;
+}
+
 std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOptimizedSelfAttention> generate_device_and_host_tensors(
     size_t n_batch, size_t n_sequence, size_t input_dim, size_t output_dim) {
 
-    size_t n_new_batches = get_random_number(1, n_batch);
+    int n_new_batches = get_random_number(1, n_batch);
     std::vector<int> new_batch_indices = get_unique_num_array(0, n_batch - 1, n_new_batches);
     auto inp_device_host = get_random_device_host_tensor({n_batch, n_sequence, input_dim});
     auto lengths_device_host = get_random_device_host_tensor_int({n_batch}, n_sequence);
     auto wk_device_host = get_random_device_host_tensor({input_dim, output_dim});
     auto wq_device_host = get_random_device_host_tensor({input_dim, output_dim});
     auto wv_device_host = get_random_device_host_tensor({input_dim, output_dim});
-    TensorInt new_batch_idx_host({new_batch_indices.size()}, DeviceType::HOST);
-    std::copy(new_batch_indices.begin(), new_batch_indices.end(), new_batch_idx_host.data());
-    TensorInt new_batch_idx_device({new_batch_indices.size()}, DeviceType::DEVICE);
-    new_batch_idx_device.copy_from(new_batch_idx_host);
+    auto new_batch_idx_device_host = get_random_device_host_tensor_int({n_batch}, n_batch - 1);
+    std::copy(new_batch_indices.begin(), new_batch_indices.end(), new_batch_idx_device_host.second.data());
+    new_batch_idx_device_host.first.copy_from(new_batch_idx_device_host.second);
 
     auto kt_cache_device_host = get_random_device_host_tensor({n_batch, output_dim, n_sequence});
     auto v_cache_device_host = get_random_device_host_tensor({n_batch, n_sequence, output_dim});
@@ -280,12 +300,13 @@ std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOp
             wk_device_host.first,
             wq_device_host.first,
             wv_device_host.first,
-            new_batch_idx_device,
+            new_batch_idx_device_host.first,
             kt_cache_device_host.first,
             v_cache_device_host.first,
             q_output_device_host.first,
             qkt_output_device_host.first,
-            attention_result_device_host.first
+            attention_result_device_host.first,
+            n_new_batches
         },
         TensorWrapForInferenceOptimizedSelfAttention{
             inp_device_host.second,
@@ -293,12 +314,13 @@ std::pair<TensorWrapForInferenceOptimizedSelfAttention, TensorWrapForInferenceOp
             wk_device_host.second,
             wq_device_host.second,
             wv_device_host.second,
-            new_batch_idx_host,
+            new_batch_idx_device_host.second,
             kt_cache_device_host.second,
             v_cache_device_host.second,
             q_output_device_host.second,
             qkt_output_device_host.second,
-            attention_result_device_host.second
+            attention_result_device_host.second,
+            n_new_batches
         });
 }
 
@@ -467,9 +489,9 @@ void self_attention_inference_host(const TensorFloat& inp, const TensorInt& leng
     const TensorFloat& wv,
     const TensorInt& new_batch_idx, TensorFloat& kt_cache, TensorFloat& v_cache,
     // avoid frequent creation of tensors
-    TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result) {
+    TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result, int n_new_batch) {
 
-    fill_new_kt_v_cache(inp, new_batch_idx, lengths, wk, wv, kt_cache, v_cache);
+    fill_new_kt_v_cache(inp, new_batch_idx, lengths, wk, wv, kt_cache, v_cache, n_new_batch);
 
     get_latest_kt_q_v(inp, lengths, wk, wq, wv, kt_cache, v_cache, q_output);
 
@@ -605,4 +627,16 @@ void decoder_host(
     emb_score = gemm_transpose_host(batch_embs, emb_table);
     decoder_host_kernel(emb_score.data(), decoder_result.data(), lengths.data(), inp.data(), wpe_table.data(),
         emb_table.data(), batch_size, n_vocab, n_sequence, emb_dim);
+}
+
+TensorFloat mock_emb_table(int n_vocab, int embedding_dims) {
+    TensorFloat device_tensor({(size_t)n_vocab, (size_t)embedding_dims}, DeviceType::DEVICE);
+    launch_randn_kernel(device_tensor.data(), device_tensor.get_total_size());
+    return device_tensor;
+}
+
+TensorFloat mock_pos_table(int n_sequence, int embedding_dims) {
+    TensorFloat device_tensor({(size_t)n_sequence, (size_t)embedding_dims}, DeviceType::DEVICE);
+    launch_randn_kernel(device_tensor.data(), device_tensor.get_total_size());
+    return device_tensor;
 }
