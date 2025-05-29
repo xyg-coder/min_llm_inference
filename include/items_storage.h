@@ -29,6 +29,8 @@ public:
     std::vector<IdTokensPair> pop_new_items(int size);
     void add_finished_item(IdTokensPair&&);
     void add_new_item(IdTokensPair&&);
+    // add new items to head, this is for paged attention preemption
+    void add_new_item_to_head(IdTokensPair&&);
     int finish_count() const;
     int new_count() const;
 private:
@@ -50,6 +52,7 @@ private:
     std::unordered_map<int, IdTokensPair> batch_id_to_token_pairs_;
 };
 
+void append_token_to_id_string_pair(IdTokensPair& id_string_pair, int to_add);
 
 /**
  * 1. Clone the token_ids from decoder_result_device to host, and query the global token_mapping (list<string>) to fine the next tokens for each row

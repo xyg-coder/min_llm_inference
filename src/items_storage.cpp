@@ -1,8 +1,6 @@
 #include "items_storage.h"
 #include "constants.h"
 #include <cassert>
-#include <iostream>
-#include <ostream>
 #include <utility>
 #include <vector>
 
@@ -87,13 +85,11 @@ std::vector<int> process_decoder_result(
         if (decode_result_data[i] == EMPTY_ROW_TOKEN_ID) {
             assert(!processing_storage.batch_id_processing(i));
             finished_indices.push_back(i);
-        } else if (decode_result_data[i] == EOF_TOKEN_ID) {
-            append_token_to_id_string_pair(processing_storage.get_token(i), decode_result_data[i]);
-            processing_storage.move_to_finished(i, item_storage);
-            finished_indices.push_back(i);
         } else {
             append_token_to_id_string_pair(processing_storage.get_token(i), decode_result_data[i]);
-            if (processing_storage.get_token(i).second.size() >= n_sequence) {
+            if (processing_storage.get_token(i).second.size() >= n_sequence
+                || decode_result_data[i] == EOF_TOKEN_ID) {
+
                 finished_indices.push_back(i);
                 processing_storage.move_to_finished(i, item_storage);
             }
