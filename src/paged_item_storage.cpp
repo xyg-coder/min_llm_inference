@@ -1,9 +1,12 @@
 #include "paged_item_storage.h"
 #include "constants.h"
 #include "items_storage.h"
+#include "tensor.hpp"
 #include "utils.h"
 #include <cassert>
 #include <iterator>
+#include <list>
+#include <stdexcept>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -19,7 +22,7 @@ void allocate_or_free_memory_blocks_if_needed(
     auto used_blocks = paged_attention_manager.get_used_block_list();
     for (auto it = used_blocks.begin(); it != used_blocks.end();) {
         if (finished_indices_set.find(it->first) != finished_indices_set.end()) {
-            return_memory_blocks(memory_block_manager, std::move(*it));
+            memory_block_manager.return_free_blocks(std::move(it->second));
             it = used_blocks.erase(it);
         } else {
             ++it;
@@ -37,16 +40,16 @@ void allocate_or_free_memory_blocks_if_needed(
                 allocate_memory_block(memory_block_manager, paged_attention_manager, *it);
             } else if (std::next(it) == used_blocks.end()) {
                 // put this element to new_items
-                move_to_new(it->first, processing_storage, item_storage);
-                return_memory_blocks(memory_block_manager, std::move(*it));
+                processing_storage.move_to_new(it->first, item_storage);
+                memory_block_manager.return_free_blocks(std::move(it->second));
                 it = used_blocks.erase(it);
                 continue;
             } else {
                 // free the list's tail
                 BatchIdMemoryBlocksPair to_remove(std::move(used_blocks.back()));
                 used_blocks.pop_back();
-                move_to_new(to_remove.first, processing_storage, item_storage);
-                return_memory_blocks(memory_block_manager, std::move(to_remove));
+                processing_storage.move_to_new(to_remove.first, item_storage);
+                memory_block_manager.return_free_blocks(std::move(it->second));
             }
         }
     }
@@ -77,10 +80,11 @@ std::vector<int> insert_new_items(
         }
 
         if (memory_block_manager.free_blocks_size() > DEFAULT_INIT_NUM_BLOCKS && item_storage.new_count() > 0 
-            && ceil_div(std::min(item_storage.head_length() + 1, n_sequence), PAGE_BLOCK_SIZE) 
+            && ceil_div(item_storage.head_length() + 1, PAGE_BLOCK_SIZE) 
                 > memory_block_manager.free_blocks_size()) {
             
             IdTokensPair popped = item_storage.pop_new_items(1)[0];
+            assert(popped.second.size() + 1 <= n_sequence);
             lengths_data[i] = popped.second.size();
             processing_storage.put(i, std::move(popped));
             std::copy(
@@ -110,4 +114,65 @@ std::vector<int> insert_new_items(
     }
 
     return new_item_indices;
+}
+
+MemoryBlockManager::MemoryBlockManager(int n_blocks, size_t each_block_size):
+    block_memory_(TensorFloat({n_blocks * each_block_size}, DeviceType::DEVICE)) {
+    
+    free_blocks_ = std::list<float*>();
+    float* data = block_memory_.data();
+    for (int i = 0; i < n_blocks; ++i) {
+        free_blocks_.push_back(data + i * each_block_size);
+    }
+}
+
+int MemoryBlockManager::free_blocks_size() const { 
+    return free_blocks_.size();
+}
+
+
+void MemoryBlockManager::return_free_blocks(std::list<float*>&& to_be_returned) {
+    free_blocks_.splice(to_be_returned.end(), to_be_returned);
+}
+
+std::list<float*> MemoryBlockManager::get_free_blocks(int size) {
+    if (free_blocks_size() < size) {
+        throw std::runtime_error("No enough block memories to return");
+    }
+    auto split_iter = free_blocks_.begin();
+    std::advance(split_iter, size);
+    std::list<float*> to_return;
+    to_return.splice(to_return.end(), free_blocks_, free_blocks_.begin(), split_iter);
+    return to_return;
+}
+
+PagedAttentionsManager::PagedAttentionsManager(
+    size_t max_batches, size_t n_sequence, size_t emb_dim):
+    inp_embedding_device({max_batches, n_sequence / PAGE_BLOCK_SIZE}, DeviceType::DEVICE),
+    inp_embedding_host({max_batches, n_sequence / PAGE_BLOCK_SIZE}, DeviceType::HOST),
+    k_cache_device({max_batches, n_sequence / PAGE_BLOCK_SIZE}, DeviceType::DEVICE),
+    k_cache_host({max_batches, n_sequence / PAGE_BLOCK_SIZE}, DeviceType::HOST),
+    v_cache_device({max_batches, n_sequence / PAGE_BLOCK_SIZE}, DeviceType::DEVICE),
+    v_cache_host({max_batches, n_sequence / PAGE_BLOCK_SIZE}, DeviceType::HOST) { }
+
+std::list<BatchIdMemoryBlocksPair>& PagedAttentionsManager::get_used_block_list() {
+    return used_blocks_;
+}
+
+void PagedAttentionsManager::flush_changes() {
+    inp_embedding_device.copy_from(inp_embedding_host); 
+    k_cache_device.copy_from(k_cache_host); 
+    v_cache_device.copy_from(v_cache_host);
+}
+
+void PagedAttentionsManager::add_batch_block_pair(BatchIdMemoryBlocksPair&& pair) {
+    used_blocks_.push_back(std::move(pair));
+}
+
+void allocate_memory_block(
+    MemoryBlockManager& memory_block_manager, PagedAttentionsManager& paged_attention_manager,
+    BatchIdMemoryBlocksPair& pair) {
+    
+    float* allocated_memory = memory_block_manager.get_free_blocks(1).front();
+    pair.second.push_front(allocated_memory);
 }

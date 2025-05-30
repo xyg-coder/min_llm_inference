@@ -66,6 +66,12 @@ void ProcessingStorage::move_to_finished(int batch_id, ItemStorage& item_storage
     batch_id_to_token_pairs_.erase(it);
 }
 
+void ProcessingStorage::move_to_new(int batch_id, ItemStorage& item_storage) {
+    auto it = batch_id_to_token_pairs_.find(batch_id);
+    item_storage.add_new_item_to_head(std::move(it->second));
+    batch_id_to_token_pairs_.erase(it); 
+}
+
 void Storage::add(IdTokensPair&& to_add) {
     data_.push_back(std::move(to_add));
 }
@@ -124,6 +130,7 @@ int insert_new_items(
         if (i >= new_item_pairs.size()) {
             lengths_data[batch_idx] = 0;
         } else {
+            assert(new_item_pairs[i].second.size() + 1 <= n_sequence);
             lengths_data[batch_idx] = new_item_pairs[i].second.size();
             std::copy(
                 new_item_pairs[i].second.begin(), new_item_pairs[i].second.end(),

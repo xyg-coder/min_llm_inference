@@ -24,8 +24,7 @@ using BatchIdMemoryBlocksPair = std::pair<int, std::list<float*>>;
 
 class PagedAttentionsManager {
 public:
-    int get_n_batch() const;
-    void return_blocks(int index, MemoryBlockManager&);
+    PagedAttentionsManager(size_t max_batches, size_t n_sequence, size_t emb_dim);
     std::list<BatchIdMemoryBlocksPair>& get_used_block_list();
     void flush_changes();
     void add_batch_block_pair(BatchIdMemoryBlocksPair&&);
@@ -39,8 +38,6 @@ private:
     // a list of <batch_index, memory-blocks>
     std::list<BatchIdMemoryBlocksPair> used_blocks_;
 };
-
-void return_memory_blocks(MemoryBlockManager&, BatchIdMemoryBlocksPair&&);
 
 // This function will also handle put the float* to the hosts devices
 void allocate_memory_block(MemoryBlockManager&, PagedAttentionsManager&, BatchIdMemoryBlocksPair&);

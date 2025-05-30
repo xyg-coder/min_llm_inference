@@ -51,6 +51,7 @@ public:
     IdTokensPair& get_token(int batch_id);
     void move_to_new(int batch_id, ItemStorage& item_storage);
     int size() const;
+    void move_to_finished(int batch_id, ItemStorage& item_storage);
 private:
     std::unordered_map<int, IdTokensPair> batch_id_to_token_pairs_;
 };
@@ -82,7 +83,3 @@ int insert_new_items(
     
 
 bool is_done(ItemStorage& item_storage, ProcessingStorage& processing_storage);
-
-void move_to_finished(int batch_id, ProcessingStorage&, ItemStorage&);
-
-void move_to_new(int batch_id, ProcessingStorage&, ItemStorage&);
