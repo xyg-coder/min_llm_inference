@@ -27,12 +27,15 @@ public:
     std::vector<IdTokensPair> pop_finished_items(int size);
     // return at most size new items
     std::vector<IdTokensPair> pop_new_items(int size);
+    const IdTokensPair& get_top() const;
     void add_finished_item(IdTokensPair&&);
     void add_new_item(IdTokensPair&&);
     // add new items to head, this is for paged attention preemption
     void add_new_item_to_head(IdTokensPair&&);
     int finish_count() const;
     int new_count() const;
+    // the length of the new_items_.begin()
+    int head_length() const;
 private:
     Storage finished_items_;
     Storage new_items_; 
@@ -46,7 +49,7 @@ public:
     void remove(int batch_id);
     bool batch_id_processing(int batch_id);
     IdTokensPair& get_token(int batch_id);
-    void move_to_finished(int batch_id, ItemStorage& item_storage);
+    void move_to_new(int batch_id, ItemStorage& item_storage);
     int size() const;
 private:
     std::unordered_map<int, IdTokensPair> batch_id_to_token_pairs_;
@@ -79,3 +82,7 @@ int insert_new_items(
     
 
 bool is_done(ItemStorage& item_storage, ProcessingStorage& processing_storage);
+
+void move_to_finished(int batch_id, ProcessingStorage&, ItemStorage&);
+
+void move_to_new(int batch_id, ProcessingStorage&, ItemStorage&);

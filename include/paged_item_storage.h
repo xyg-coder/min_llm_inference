@@ -4,6 +4,7 @@
 #include "tensor.hpp"
 #include <cstddef>
 #include <list>
+#include <utility>
 #include <vector>
 
 class MemoryBlockManager {
@@ -12,17 +13,22 @@ public:
     MemoryBlockManager(int n_blocks, size_t each_block_size);
     int free_blocks_size() const;
     // get size free_blocks, if not enough, throw exception
-    std::vector<float*> get_free_blocks(int size);
+    std::list<float*> get_free_blocks(int size);
     void return_free_blocks(std::list<float*>&&);
 private:
     TensorFloat block_memory_;
     std::list<float*> free_blocks_;
 };
 
+using BatchIdMemoryBlocksPair = std::pair<int, std::list<float*>>;
+
 class PagedAttentionsManager {
 public:
     int get_n_batch() const;
     void return_blocks(int index, MemoryBlockManager&);
+    std::list<BatchIdMemoryBlocksPair>& get_used_block_list();
+    void flush_changes();
+    void add_batch_block_pair(BatchIdMemoryBlocksPair&&);
 private:
     TensorFloatPoint inp_embedding_device;
     TensorFloatPoint k_cache_device;
@@ -30,16 +36,21 @@ private:
     TensorFloatPoint inp_embedding_host;
     TensorFloatPoint k_cache_host;
     TensorFloatPoint v_cache_host;
-    std::vector<std::list<float*>> used_blocks_;
-    int n_batch;
+    // a list of <batch_index, memory-blocks>
+    std::list<BatchIdMemoryBlocksPair> used_blocks_;
 };
 
-void return_memory_blocks(PagedAttentionsManager&, MemoryBlockManager&, int index);
+void return_memory_blocks(MemoryBlockManager&, BatchIdMemoryBlocksPair&&);
 
-void process_decoder_result(
-    const TensorInt& decoder_result_device, TensorInt& decoder_result_host,
-    ItemStorage& item_storage, ProcessingStorage& processing_storage, int n_sequence,
-    MemoryBlockManager& memory_block_manager,
-    PagedAttentionsManager& page_attentions_manager);
+// This function will also handle put the float* to the hosts devices
+void allocate_memory_block(MemoryBlockManager&, PagedAttentionsManager&, BatchIdMemoryBlocksPair&);
 
-int insert_new_items();
+void allocate_or_free_memory_blocks_if_needed(PagedAttentionsManager&, MemoryBlockManager&,
+    ProcessingStorage&, std::vector<int>& finished_indices);
+
+std::vector<int> insert_new_items(
+    TensorInt& inp_device, TensorInt& inp_host,
+    TensorInt& lengths_device, TensorInt& lengths_host,
+    TensorInt& new_items_indices_device, TensorInt& new_items_indices_host,
+    ItemStorage& item_storage, ProcessingStorage& processing_storage,
+    MemoryBlockManager& memory_block_manager, PagedAttentionsManager& paged_attention_manager);
