@@ -152,3 +152,11 @@ int ProcessingStorage::size() const {
 bool is_done(ItemStorage& item_storage, ProcessingStorage& processing_storage) {
     return processing_storage.size() + item_storage.new_count() == 0;
 }
+
+void Storage::add_to_front(IdTokensPair&& pair) {
+    data_.push_front(std::move(pair));
+}
+
+void ItemStorage::add_new_item_to_head(IdTokensPair&& pair) {
+    new_items_.add_to_front(std::move(pair));
+}

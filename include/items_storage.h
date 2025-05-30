@@ -14,6 +14,7 @@ public:
     Storage() = default;
     std::vector<IdTokensPair> pop_pairs(int size);
     void add(IdTokensPair&&);
+    void add_to_front(IdTokensPair&&);
     int size() const;
 private:
     std::list<IdTokensPair> data_;
