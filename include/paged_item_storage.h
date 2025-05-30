@@ -26,17 +26,20 @@ class PagedAttentionsManager {
 public:
     PagedAttentionsManager(size_t max_batches, size_t n_sequence, size_t emb_dim);
     std::list<BatchIdMemoryBlocksPair>& get_used_block_list();
-    void flush_changes();
+    void maybe_flush_changes();
     void add_batch_block_pair(BatchIdMemoryBlocksPair&&);
+    void set_block_pos(int batch_id, int i_block, float*);
 private:
-    TensorFloatPoint inp_embedding_device;
-    TensorFloatPoint k_cache_device;
-    TensorFloatPoint v_cache_device;
-    TensorFloatPoint inp_embedding_host;
-    TensorFloatPoint k_cache_host;
-    TensorFloatPoint v_cache_host;
+    // For each pointer, it includes 3 blocks of data:
+    // <[PAGE_BLOCK_SIZE, emb_dim], [PAGE_BLOCK_SIZE, emb_dim], [PAGE_BLOCK_SIZE, emb_dim]>
+    // <inp_embedding, k_cache, v_cache>
+    TensorFloatPoint page_table_host;
+    TensorFloatPoint page_table_device;
     // a list of <batch_index, memory-blocks>
     std::list<BatchIdMemoryBlocksPair> used_blocks_;
+    // width: n_sequence / PAGE_BLOCK_SIZE
+    size_t width_;
+    bool needs_sync_;
 };
 
 // This function will also handle put the float* to the hosts devices

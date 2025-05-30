@@ -4,6 +4,7 @@
 #include "tensor.hpp"
 #include "utils.h"
 #include <cassert>
+#include <exception>
 #include <iterator>
 #include <list>
 #include <stdexcept>
@@ -108,14 +109,12 @@ std::vector<int> insert_new_items(
         lengths_device.copy_from(lengths_host);
         new_items_indices_device.copy_from(new_items_indices_host);
     }
-
-    if (!new_item_indices.empty()) {
-        paged_attention_manager.flush_changes();
-    }
+    paged_attention_manager.maybe_flush_changes();
 
     return new_item_indices;
 }
 
+// each block size should be 3 * embedding_dim * PAGE_BLOCK_SIZE
 MemoryBlockManager::MemoryBlockManager(int n_blocks, size_t each_block_size):
     block_memory_(TensorFloat({n_blocks * each_block_size}, DeviceType::DEVICE)) {
     
@@ -148,25 +147,39 @@ std::list<float*> MemoryBlockManager::get_free_blocks(int size) {
 
 PagedAttentionsManager::PagedAttentionsManager(
     size_t max_batches, size_t n_sequence, size_t emb_dim):
-    inp_embedding_device({max_batches, n_sequence / PAGE_BLOCK_SIZE}, DeviceType::DEVICE),
-    inp_embedding_host({max_batches, n_sequence / PAGE_BLOCK_SIZE}, DeviceType::HOST),
-    k_cache_device({max_batches, n_sequence / PAGE_BLOCK_SIZE}, DeviceType::DEVICE),
-    k_cache_host({max_batches, n_sequence / PAGE_BLOCK_SIZE}, DeviceType::HOST),
-    v_cache_device({max_batches, n_sequence / PAGE_BLOCK_SIZE}, DeviceType::DEVICE),
-    v_cache_host({max_batches, n_sequence / PAGE_BLOCK_SIZE}, DeviceType::HOST) { }
+    page_table_device({max_batches, n_sequence / PAGE_BLOCK_SIZE}, DeviceType::DEVICE),
+    page_table_host({max_batches, n_sequence / PAGE_BLOCK_SIZE}, DeviceType::HOST),
+    needs_sync_(false), width_(n_sequence / PAGE_BLOCK_SIZE) { 
+        assert(n_sequence % PAGE_BLOCK_SIZE == 0);
+    }
 
 std::list<BatchIdMemoryBlocksPair>& PagedAttentionsManager::get_used_block_list() {
     return used_blocks_;
 }
 
-void PagedAttentionsManager::flush_changes() {
-    inp_embedding_device.copy_from(inp_embedding_host); 
-    k_cache_device.copy_from(k_cache_host); 
-    v_cache_device.copy_from(v_cache_host);
+void PagedAttentionsManager::maybe_flush_changes() {
+    if (needs_sync_) {
+        page_table_device.copy_from(page_table_host); 
+    }
+    needs_sync_ = false;
+}
+
+void PagedAttentionsManager::set_block_pos(int batch_id, int i_block, float* memory_pos) {
+    page_table_host.data()[batch_id * width_ + i_block] = memory_pos;
+    needs_sync_ = true;
 }
 
 void PagedAttentionsManager::add_batch_block_pair(BatchIdMemoryBlocksPair&& pair) {
+    int batch_id = pair.first;
+    std::list<float*>& blocks = pair.second;
+    float** base = page_table_host.data() + batch_id * width_;
+    int i = 0;
+    for (auto it = blocks.begin(); it != blocks.end(); ++it) {
+        base[i++] = *it;
+    }
+
     used_blocks_.push_back(std::move(pair));
+    needs_sync_ = true;
 }
 
 void allocate_memory_block(
@@ -175,4 +188,5 @@ void allocate_memory_block(
     
     float* allocated_memory = memory_block_manager.get_free_blocks(1).front();
     pair.second.push_front(allocated_memory);
+    paged_attention_manager.set_block_pos(pair.first, pair.second.size() - 1, allocated_memory);
 }
