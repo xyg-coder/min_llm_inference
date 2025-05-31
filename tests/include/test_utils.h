@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "items_storage.h"
 #include "paged_item_storage.h"
 #include "tensor.hpp"
 #include <utility>
@@ -76,6 +77,7 @@ public:
     MemoryBlockManager memory_block_manager;
     ProcessingStorage processing_storage;
     ItemStorage item_storage;
+    std::vector<IdTokensPair> tokens;
 };
 
 PagedAttentionTestWrapper mock_paged_attention_test_wrapper(

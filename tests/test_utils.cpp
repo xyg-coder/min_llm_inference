@@ -1,10 +1,8 @@
 #include "test_utils.h"
 #include "constants.h"
 #include "include/test_utils.h"
-#include "inference_model.h"
 #include "kernels/rand_assign.h"
 #include "kernels/utils.cuh"
-#include "layers.h"
 #include "items_storage.h"
 #include "paged_item_storage.h"
 #include "tensor.hpp"
@@ -650,14 +648,18 @@ PagedAttentionTestWrapper mock_paged_attention_test_wrapper(
     MemoryBlockManager memory_block_manager(n_blocks, PAGE_BLOCK_SIZE * 3 * emb_dim);
     ProcessingStorage processing_storage;
     ItemStorage item_storage;
+    std::vector<IdTokensPair> token_pairs;
 
     for (int i = 0; i < new_items_lengths.size(); ++i) {
-        item_storage.add_new_item(std::make_pair(i, get_unique_num_array(0, EOF_TOKEN_ID - 1, new_items_lengths[i])));
+        token_pairs.push_back(std::make_pair(i, create_random_vector(new_items_lengths[i], 0, EOF_TOKEN_ID - 1)));
+        item_storage.add_new_item(IdTokensPair(token_pairs[i]));
     }
 
     return PagedAttentionTestWrapper({
         std::move(paged_attention_manager),
         std::move(memory_block_manager),
         std::move(processing_storage),
-        std::move(item_storage)});
+        std::move(item_storage),
+        std::move(token_pairs)}
+    );
 }

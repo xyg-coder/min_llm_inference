@@ -32,13 +32,26 @@ TEST(PagedItemStorageTest, InsertNewItemsTest) {
         wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager);
 
     ASSERT_EQ(new_item_indices.size(), max_batches);
-    for (int i = 0; i < new_item_indices; ++i) {
+    for (int i = 0; i < new_item_indices.size(); ++i) {
         ASSERT_EQ(new_item_indices[i], i);
     }
 
     ASSERT_EQ(wrapper.item_storage.new_count(), max_batches);
     ASSERT_EQ(wrapper.memory_block_manager.free_blocks_size(), 0);
     // TODO: check inp, lengths, new_item_indices
+    inp_device_host.second.copy_from(inp_device_host.first);
+    lengths_device_host.second.copy_from(lengths_device_host.first);
+    new_item_indices_device_host.second.copy_from(new_item_indices_device_host.first);
+    const int* inp_data = inp_device_host.second.data();
+    const int* lengths_data = lengths_device_host.second.data();
+    const int* new_item_indices_data = new_item_indices_device_host.second.data();
+    for (int i = 0; i < max_batches; ++i) {
+        ASSERT_EQ(lengths_data[i], new_item_lengths[i]);
+        ASSERT_EQ(new_item_indices_data[i], i);
+        for (int j = 0; j < new_item_lengths[i]; ++j) {
+            ASSERT_EQ(wrapper.tokens[i].second[j], inp_data[i * n_sequence + j]);
+        }
+    }
 }
 
 // Test if we corretly allocate memories

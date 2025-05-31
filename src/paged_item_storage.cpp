@@ -152,7 +152,7 @@ PagedAttentionsManager::PagedAttentionsManager(
     page_table_host({max_batches, n_sequence / PAGE_BLOCK_SIZE}, DeviceType::HOST),
     needs_sync_(false), width_(n_sequence / PAGE_BLOCK_SIZE) { 
         assert(n_sequence % PAGE_BLOCK_SIZE == 0);
-    }
+}
 
 std::list<BatchIdMemoryBlocksPair>& PagedAttentionsManager::get_used_block_list() {
     return used_blocks_;

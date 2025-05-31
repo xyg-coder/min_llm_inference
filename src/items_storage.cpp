@@ -76,6 +76,14 @@ void Storage::add(IdTokensPair&& to_add) {
     data_.push_back(std::move(to_add));
 }
 
+int Storage::head_length() const {
+    return data_.begin()->second.size();
+}
+
+int ItemStorage::head_length() const {
+    return new_items_.head_length();
+}
+
 bool ProcessingStorage::batch_id_processing(int batch_id) {
     return batch_id_to_token_pairs_.find(batch_id) != batch_id_to_token_pairs_.end();
 }
