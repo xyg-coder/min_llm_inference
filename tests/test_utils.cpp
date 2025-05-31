@@ -6,6 +6,7 @@
 #include "kernels/utils.cuh"
 #include "layers.h"
 #include "items_storage.h"
+#include "paged_item_storage.h"
 #include "tensor.hpp"
 #include <algorithm>
 #include <cassert>
@@ -639,4 +640,24 @@ TensorFloat mock_pos_table(int n_sequence, int embedding_dims) {
     TensorFloat device_tensor({(size_t)n_sequence, (size_t)embedding_dims}, DeviceType::DEVICE);
     launch_randn_kernel(device_tensor.data(), device_tensor.get_total_size());
     return device_tensor;
+}
+
+PagedAttentionTestWrapper mock_paged_attention_test_wrapper(
+    size_t max_batches, size_t n_sequence, size_t emb_dim, int n_blocks,
+    const std::vector<int>& new_items_lengths) {
+
+    PagedAttentionsManager paged_attention_manager(max_batches, n_sequence, emb_dim);
+    MemoryBlockManager memory_block_manager(n_blocks, PAGE_BLOCK_SIZE * 3 * emb_dim);
+    ProcessingStorage processing_storage;
+    ItemStorage item_storage;
+
+    for (int i = 0; i < new_items_lengths.size(); ++i) {
+        item_storage.add_new_item(std::make_pair(i, get_unique_num_array(0, EOF_TOKEN_ID - 1, new_items_lengths[i])));
+    }
+
+    return PagedAttentionTestWrapper({
+        std::move(paged_attention_manager),
+        std::move(memory_block_manager),
+        std::move(processing_storage),
+        std::move(item_storage)});
 }

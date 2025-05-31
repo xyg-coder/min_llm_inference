@@ -4,7 +4,6 @@
 #include "tensor.hpp"
 #include "utils.h"
 #include <cassert>
-#include <exception>
 #include <iterator>
 #include <list>
 #include <stdexcept>
@@ -75,6 +74,7 @@ std::vector<int> insert_new_items(
         occupied_batch_indices.insert(it->first);
     }
     bool need_copy = false;
+    int insert_index = 0;
     for (int i = 0; i < max_batch; ++i) {
         if (occupied_batch_indices.find(i) != occupied_batch_indices.end()) {
             continue;
@@ -91,6 +91,7 @@ std::vector<int> insert_new_items(
             std::copy(
                 popped.second.begin(), popped.second.end(),
                 inp_data + i * n_sequence);
+            new_items_indices_data[insert_index++] = i;
             int n_blocks = std::max(
                 ceil_div(std::min(item_storage.head_length() + 1, n_sequence), PAGE_BLOCK_SIZE),
                 DEFAULT_INIT_NUM_BLOCKS);
