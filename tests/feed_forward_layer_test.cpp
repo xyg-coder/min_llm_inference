@@ -33,7 +33,6 @@ TEST(FeedForwardLayerTest, FeedForwardTest) {
     float* input_host_data = inputs_host.data();
     float* weight_host_data = weights_host.data();
     float* bias_host_data = bias_host.data();
-    std::cout << input_host_data[0] << ",,,," << std::endl;
     for (size_t i = 0; i < batch_size; ++i) {
         for (size_t j = 0; j < out_features; ++j) {
             float expected = 0;
