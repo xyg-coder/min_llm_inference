@@ -23,7 +23,7 @@ private:
 };
 
 
-class ItemStorage : NonCopyableNonClonable {
+class ItemStorage : public NonCopyableNonClonable {
 public:
     ItemStorage() = default;
     // return at most size finished items

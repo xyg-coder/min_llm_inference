@@ -73,6 +73,8 @@ TensorFloat mock_pos_table(int n_sequence, int embedding_dims);
 
 class PagedAttentionTestWrapper {
 public:
+    PagedAttentionTestWrapper(
+        PagedAttentionsManager&&, MemoryBlockManager&&, ProcessingStorage&&, ItemStorage&&, std::vector<IdTokensPair>&&);
     PagedAttentionsManager paged_attention_manager;
     MemoryBlockManager memory_block_manager;
     ProcessingStorage processing_storage;

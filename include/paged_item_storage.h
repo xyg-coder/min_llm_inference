@@ -13,7 +13,7 @@ public:
     MemoryBlockManager(int n_blocks, size_t each_block_size);
     int free_blocks_size() const;
     // get size free_blocks, if not enough, throw exception
-    std::list<float*> get_free_blocks(int size);
+    std::list<float*> pop_free_blocks(int size);
     void return_free_blocks(std::list<float*>&&);
 private:
     TensorFloat block_memory_;

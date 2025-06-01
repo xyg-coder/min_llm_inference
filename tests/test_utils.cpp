@@ -654,11 +654,22 @@ PagedAttentionTestWrapper mock_paged_attention_test_wrapper(
         item_storage.add_new_item(IdTokensPair(token_pairs[i]));
     }
 
-    return PagedAttentionTestWrapper({
+    return PagedAttentionTestWrapper(
         std::move(paged_attention_manager),
         std::move(memory_block_manager),
         std::move(processing_storage),
+        // TODO: item_storage seems to be the issue
         std::move(item_storage),
-        std::move(token_pairs)}
-    );
+        std::move(token_pairs));
 }
+
+PagedAttentionTestWrapper::PagedAttentionTestWrapper(
+    PagedAttentionsManager&& paged_attention_manager,
+    MemoryBlockManager&& memory_block_manager,
+    ProcessingStorage&& processing_storage,
+    ItemStorage&& item_storage, std::vector<IdTokensPair>&& tokens):
+        paged_attention_manager(std::move(paged_attention_manager)),
+        memory_block_manager(std::move(memory_block_manager)),
+        processing_storage(std::move(processing_storage)),
+        item_storage(std::move(item_storage)),
+        tokens(std::move(tokens)) { }

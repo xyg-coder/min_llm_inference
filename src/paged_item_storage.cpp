@@ -80,9 +80,9 @@ std::vector<int> insert_new_items(
             continue;
         }
 
-        if (memory_block_manager.free_blocks_size() > DEFAULT_INIT_NUM_BLOCKS && item_storage.new_count() > 0 
+        if (memory_block_manager.free_blocks_size() >= DEFAULT_INIT_NUM_BLOCKS && item_storage.new_count() > 0 
             && memory_block_manager.free_blocks_size() 
-                > ceil_div(item_storage.head_length() + 1, PAGE_BLOCK_SIZE)) {
+                >= ceil_div(item_storage.head_length() + 1, PAGE_BLOCK_SIZE)) {
             
             IdTokensPair popped = item_storage.pop_new_items(1)[0];
             assert(popped.second.size() + 1 <= n_sequence);
@@ -97,7 +97,7 @@ std::vector<int> insert_new_items(
                 DEFAULT_INIT_NUM_BLOCKS);
 
             paged_attention_manager.add_batch_block_pair(std::make_pair(
-                i, std::move(memory_block_manager.get_free_blocks(n_blocks))));
+                i, memory_block_manager.pop_free_blocks(n_blocks)));
             new_item_indices.push_back(i);
             need_copy = true;
         } else {
@@ -135,7 +135,7 @@ void MemoryBlockManager::return_free_blocks(std::list<float*>&& to_be_returned) 
     free_blocks_.splice(to_be_returned.end(), to_be_returned);
 }
 
-std::list<float*> MemoryBlockManager::get_free_blocks(int size) {
+std::list<float*> MemoryBlockManager::pop_free_blocks(int size) {
     if (free_blocks_size() < size) {
         throw std::runtime_error("No enough block memories to return");
     }
@@ -172,7 +172,7 @@ void PagedAttentionsManager::set_block_pos(int batch_id, int i_block, float* mem
 
 void PagedAttentionsManager::add_batch_block_pair(BatchIdMemoryBlocksPair&& pair) {
     int batch_id = pair.first;
-    std::list<float*>& blocks = pair.second;
+    const std::list<float*>& blocks = pair.second;
     float** base = page_table_host.data() + batch_id * width_;
     int i = 0;
     for (auto it = blocks.begin(); it != blocks.end(); ++it) {
@@ -187,7 +187,7 @@ void allocate_memory_block(
     MemoryBlockManager& memory_block_manager, PagedAttentionsManager& paged_attention_manager,
     BatchIdMemoryBlocksPair& pair) {
     
-    float* allocated_memory = memory_block_manager.get_free_blocks(1).front();
+    float* allocated_memory = memory_block_manager.pop_free_blocks(1).front();
     pair.second.push_front(allocated_memory);
     paged_attention_manager.set_block_pos(pair.first, pair.second.size() - 1, allocated_memory);
 }
