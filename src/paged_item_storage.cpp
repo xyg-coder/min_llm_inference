@@ -81,16 +81,16 @@ std::vector<int> insert_new_items(
         }
 
         if (memory_block_manager.free_blocks_size() > DEFAULT_INIT_NUM_BLOCKS && item_storage.new_count() > 0 
-            && ceil_div(item_storage.head_length() + 1, PAGE_BLOCK_SIZE) 
-                > memory_block_manager.free_blocks_size()) {
+            && memory_block_manager.free_blocks_size() 
+                > ceil_div(item_storage.head_length() + 1, PAGE_BLOCK_SIZE)) {
             
             IdTokensPair popped = item_storage.pop_new_items(1)[0];
             assert(popped.second.size() + 1 <= n_sequence);
             lengths_data[i] = popped.second.size();
-            processing_storage.put(i, std::move(popped));
             std::copy(
                 popped.second.begin(), popped.second.end(),
                 inp_data + i * n_sequence);
+            processing_storage.put(i, std::move(popped));
             new_items_indices_data[insert_index++] = i;
             int n_blocks = std::max(
                 ceil_div(std::min(item_storage.head_length() + 1, n_sequence), PAGE_BLOCK_SIZE),

@@ -37,12 +37,16 @@ int ItemStorage::new_count() const {
 }
 
 std::vector<IdTokensPair> Storage::pop_pairs(int size) {
-    std::vector<IdTokensPair> to_pop;
-    for (int i = 0; i < size && !data_.empty(); ++i) {
-        to_pop.push_back(data_.front());
-        data_.erase(data_.begin());
+    if (size > data_.size()) {
+        size = data_.size();
     }
-    return to_pop;
+    std::vector<IdTokensPair> result;
+    auto it = data_.begin();
+    for (int i = 0; i < size; ++i) {
+        result.push_back(std::move(*it));
+        it = data_.erase(it);
+    }
+    return result;
 }
 
 void ProcessingStorage::put(int batch_index, IdTokensPair&& tokens) {
@@ -167,4 +171,12 @@ void Storage::add_to_front(IdTokensPair&& pair) {
 
 void ItemStorage::add_new_item_to_head(IdTokensPair&& pair) {
     new_items_.add_to_front(std::move(pair));
+}
+
+const IdTokensPair& ItemStorage::get_top() const {
+    return new_items_.get_top();
+}
+
+const IdTokensPair& Storage::get_top() const {
+    return data_.front();
 }

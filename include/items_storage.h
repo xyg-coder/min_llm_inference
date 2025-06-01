@@ -17,6 +17,7 @@ public:
     void add_to_front(IdTokensPair&&);
     int size() const;
     int head_length() const;
+    const IdTokensPair& get_top() const;
 private:
     std::list<IdTokensPair> data_;
 };
