@@ -49,7 +49,7 @@ void allocate_or_free_memory_blocks_if_needed(
                 BatchIdMemoryBlocksPair to_remove(std::move(used_blocks.back()));
                 used_blocks.pop_back();
                 processing_storage.move_to_new(to_remove.first, item_storage);
-                memory_block_manager.return_free_blocks(std::move(it->second));
+                memory_block_manager.return_free_blocks(std::move(to_remove.second));
             }
         } else {
             it++;
@@ -134,7 +134,7 @@ int MemoryBlockManager::free_blocks_size() const {
 
 
 void MemoryBlockManager::return_free_blocks(std::list<float*>&& to_be_returned) {
-    free_blocks_.splice(to_be_returned.end(), to_be_returned);
+    free_blocks_.splice(free_blocks_.end(), to_be_returned);
 }
 
 std::list<float*> MemoryBlockManager::pop_free_blocks(int size) {
