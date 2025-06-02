@@ -658,7 +658,6 @@ PagedAttentionTestWrapper mock_paged_attention_test_wrapper(
         std::move(paged_attention_manager),
         std::move(memory_block_manager),
         std::move(processing_storage),
-        // TODO: item_storage seems to be the issue
         std::move(item_storage),
         std::move(token_pairs));
 }
