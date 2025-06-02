@@ -60,7 +60,7 @@ __global__ void fill_new_kt_v_cache(
         }
 
         __syncthreads();
-        #pragma unroll
+
         for (int j = 0; j < TILE_SIZE; ++j) {
             k_result += (inp_shared[threadIdx.y][j] * kv_shared[j][threadIdx.x]);
         }
@@ -73,7 +73,6 @@ __global__ void fill_new_kt_v_cache(
         }
 
         __syncthreads();
-        #pragma unroll
         for (int j = 0; j < TILE_SIZE; ++j) {
             v_result += (inp_shared[threadIdx.y][j] * kv_shared[j][threadIdx.x]);
         }
@@ -127,6 +126,7 @@ __global__ void get_latest_kt_q_v(
 
         __syncthreads();
         if (output_col_idx < output_dim) {
+
             for (int j = 0; j < TILE_SIZE_SQUARE; ++j) {
                 k_result += (inp_shared[j] * wk[(i + j) * output_dim + output_col_idx]);
                 v_result += (inp_shared[j] * wv[(i + j) * output_dim + output_col_idx]);
@@ -171,6 +171,7 @@ __global__ void qkt(
             q_shared[threadIdx.x] = 0.0f;
         }
         __syncthreads();
+
         for (int j = 0; result_col < cur_batch_length && j < TILE_SIZE_SQUARE; ++j) {
             result += (q_shared[j] * base_kt[(i + j) * n_sequence + result_col]);
         }
@@ -205,6 +206,7 @@ __global__ void softmax_in_place_with_lengths(
 
     const float4* qkt_vec4 = reinterpret_cast<const float4*>(qkt_base);
     int cur_length = lengths[row_id];
+
     for (int i = warp.thread_rank(); i < (cur_length + 4  - 1) / 4; i += warp.num_threads()) {
         float4 v = qkt_vec4[i];
         float old_max_val = maxval;
@@ -223,8 +225,11 @@ __global__ void softmax_in_place_with_lengths(
     float norm = 1.f / global_sum;
     float temp[4];
     float4* out_vec = reinterpret_cast<float4*>(qkt + row_id * n_sequence);
+
     for (int i = warp.thread_rank(); i < n_sequence / 4; i += warp.num_threads()) {
         float4 v = out_vec[i];
+
+        #pragma unroll
         for (int j = 0; j < 4; ++j) {
             if (i * 4 + j < cur_length) {
                 temp[j] = expf(vec_at(v, j) - global_maxval) * norm;
@@ -254,6 +259,7 @@ __global__ void softmax_v(
     const float* v_cache_base = v_cache + i_batch * n_sequence * output_dim;
     float result = 0;
     int write_col = blockIdx.x * TILE_SIZE_SQUARE + threadIdx.x;
+
     for (int i = 0; i < cur_batch_length; i += TILE_SIZE_SQUARE) {
         if (i + threadIdx.x < cur_batch_length) {
             softmax_res_share[threadIdx.x] = softmax_result_base[i + threadIdx.x];
@@ -261,6 +267,7 @@ __global__ void softmax_v(
             softmax_res_share[threadIdx.x] = 0.0f;
         }
         __syncthreads();
+
         for (int j = 0; write_col < output_dim && j < TILE_SIZE_SQUARE && i + j < cur_batch_length; ++j) {
             result += (softmax_res_share[j] * v_cache_base[(i + j) * output_dim + write_col]);
         }

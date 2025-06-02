@@ -1,0 +1,282 @@
+#include "constants.h"
+#include "tensor.hpp"
+#include <__clang_cuda_builtin_vars.h>
+
+__device__ __inline__ float get_inp_embedding(
+    float** page_table, int i_batch, int n_sequence, int i_sequence, int emb_dim, int page_block_size, int i_dim) {
+    
+    int page_table_width = n_sequence / page_block_size;
+    const float* page_pos = page_table[i_batch * page_table_width + i_sequence / page_block_size];
+    return page_pos[(i_sequence % page_block_size) * emb_dim * 3 + i_dim];
+}
+
+__device__ __inline__ void set_k_cache(
+    float** page_table, int i_batch, int n_sequence, int i_sequence, int emb_dim, int page_block_size, int i_dim,
+    float value) {
+    
+    int page_table_width = n_sequence / page_block_size;
+    float* page_pos = page_table[i_batch * page_table_width + i_sequence / page_block_size];
+    page_pos[(i_sequence % page_block_size) * emb_dim * 3 + emb_dim + i_dim] = value;
+}
+
+__device__ __inline__ float get_k_cache(
+    const float** page_table, int i_batch, int n_sequence, int i_sequence, int emb_dim, int page_block_size, int i_dim) {
+    
+    int page_table_width = n_sequence / page_block_size;
+    const float* page_pos = page_table[i_batch * page_table_width + i_sequence / page_block_size];
+    return page_pos[(i_sequence % page_block_size) * emb_dim * 3 + emb_dim + i_dim];
+}
+
+__device__ __inline__ void set_v_cache(
+    float** page_table, int i_batch, int n_sequence, int i_sequence, int emb_dim, int page_block_size, int i_dim,
+    float value) {
+    
+    int page_table_width = n_sequence / page_block_size;
+    float* page_pos = page_table[i_batch * page_table_width + i_sequence / page_block_size];
+    page_pos[(i_sequence % page_block_size) * emb_dim * 3 + emb_dim * 2 + i_dim] = value;
+}
+
+__device__ __inline__ float get_v_cache(
+    const float** page_table, int i_batch, int n_sequence, int i_sequence, int emb_dim, int page_block_size, int i_dim) {
+    
+    int page_table_width = n_sequence / page_block_size;
+    const float* page_pos = page_table[i_batch * page_table_width + i_sequence / page_block_size];
+    return page_pos[(i_sequence % page_block_size) * emb_dim * 3 + emb_dim * 2 + i_dim];
+}
+
+/**
+ * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
+ * new_batch_idx: [n_new_batch]
+ * lengths: [n_batch]
+ * wk: [emb_dim, emb_dim]
+ * wv: [emb_dim, emb_dim]
+ * 
+ * Total number of threads: n_new_batch * num_sequence * emb_dim
+ * outputting to [new_batch_idx[blockIdx.z], blockIdx.y * TILE_SIZE + threadIdx.y, blockIdx.x * TILE_SIZE + threadIdx.x]
+ * 1. inp[new_batch_idx] * wk or wv -> [n_new_batch, n_sequence, emb_dim]
+ * 2. if i_sequence < lenghs[batch_idx]: copy to to v_cache/k_cache
+ */
+__global__ void fill_new_k_v_cache_paged_attention(
+    float** page_table, const int* new_batch_idx,
+    const int* lengths,
+    const float* wk, const float* wv,
+    int n_sequence, int emb_dim) {
+    __shared__ float inp_shared[TILE_SIZE][TILE_SIZE];
+    __shared__ float kv_shared[TILE_SIZE][TILE_SIZE];
+    int batch_idx = new_batch_idx[blockIdx.z];
+    int output_row_idx = blockIdx.y * TILE_SIZE + threadIdx.y;
+    int output_col_idx = blockIdx.x * TILE_SIZE + threadIdx.x;
+    // the max_i_sequence needed
+    int cur_batch_length = lengths[batch_idx];
+    // There is no thread in this block working, so we can exit
+    if (blockIdx.y * TILE_SIZE >= cur_batch_length) {
+        return;
+    }
+    float k_result = 0;
+    float v_result = 0;
+    int page_table_width = n_sequence / PAGE_BLOCK_SIZE;
+    float** base_table = page_table + batch_idx * page_table_width;
+
+    for (int i = 0; i < emb_dim; i += TILE_SIZE) {
+        if (output_row_idx < cur_batch_length && i + threadIdx.x < emb_dim) {
+            inp_shared[threadIdx.y][threadIdx.x] = get_inp_embedding(
+                page_table, batch_idx, n_sequence, output_row_idx, emb_dim, PAGE_BLOCK_SIZE,
+                i + threadIdx.x);
+        } else {
+            inp_shared[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+
+        if (i + threadIdx.y < emb_dim && output_col_idx < emb_dim) {
+            kv_shared[threadIdx.y][threadIdx.x] = wk[(i + threadIdx.y) * emb_dim + output_col_idx];
+        } else {
+            kv_shared[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+
+        __syncthreads();
+        for (int j = 0; j < TILE_SIZE; ++j) {
+            k_result += (inp_shared[threadIdx.y][j] * kv_shared[j][threadIdx.x]);
+        }
+
+        __syncthreads();
+        if (i + threadIdx.y < emb_dim && output_col_idx < emb_dim) {
+            kv_shared[threadIdx.y][threadIdx.x] = wv[(i + threadIdx.y) * emb_dim + output_col_idx];
+        } else {
+            kv_shared[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+
+        __syncthreads();
+        for (int j = 0; j < TILE_SIZE; ++j) {
+            v_result += (inp_shared[threadIdx.y][j] * kv_shared[j][threadIdx.x]);
+        }
+        __syncthreads();
+    }
+    if (output_row_idx < cur_batch_length && output_col_idx < emb_dim) {
+        set_k_cache(page_table, batch_idx, n_sequence, output_row_idx, emb_dim,
+            PAGE_BLOCK_SIZE, output_col_idx, k_result);
+        set_k_cache(page_table, batch_idx, n_sequence, output_row_idx, emb_dim,
+            PAGE_BLOCK_SIZE, output_col_idx, v_result);
+    }
+}
+
+/**
+ * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
+ * lengths: [n_batch]
+ * wq, wk, wv: [input_dim, output_dim]
+ * q_output: [n_batch, 1, output_dim]
+
+ * 1. use the last embedding for each batch to multiply with wq, wk, wv -> [n_batch, 1, onput_dim]
+ * 2. save to k_cache, v_cache and q_output
+ */
+__global__ void get_latest_k_q_v_paged_attention(
+    float** page_table, const int* lengths,
+    const float* wk, const float* wq, const float* wv,
+    float* q_output,
+    int n_batch, int n_sequence, int emb_dim) {
+    __shared__ float inp_shared[TILE_SIZE_SQUARE];
+    int i_batch = blockIdx.y;
+    int cur_length = lengths[i_batch];
+    // cur_length == 0 means empty row
+    if (cur_length == 0) {
+        return;
+    }
+    int i_sequence = cur_length - 1;
+    int output_col_idx = blockIdx.x * TILE_SIZE_SQUARE + threadIdx.x;
+    float k_result = 0;
+    float q_result = 0;
+    float v_result = 0;
+
+    for (int i = 0; i < emb_dim; i += TILE_SIZE_SQUARE) {
+        if (i + threadIdx.x < emb_dim) {
+            inp_shared[threadIdx.x] = get_inp_embedding(page_table, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x);
+        } else {
+            inp_shared[threadIdx.x] = 0.0f;
+        }
+
+        __syncthreads();
+        if (output_col_idx < emb_dim) {
+            for (int j = 0; j < TILE_SIZE_SQUARE; ++j) {
+                k_result += (inp_shared[j] * wk[(i + j) * emb_dim + output_col_idx]);
+                v_result += (inp_shared[j] * wv[(i + j) * emb_dim + output_col_idx]);
+                q_result += (inp_shared[j] * wq[(i + j) * emb_dim + output_col_idx]);
+            }
+        }
+        __syncthreads();
+    }
+    if (output_col_idx < emb_dim) {
+        set_v_cache(page_table, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, v_result);
+        set_k_cache(page_table, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, k_result);
+        q_output[i_batch * emb_dim + output_col_idx] = q_result;
+    }
+}
+
+/**
+ * q: [n_batch, dim]
+ * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
+ * qkt: [n_batch, n_sequence]
+ * 
+ * One block handles (blockIdx.y, blockIdx.x*TILE_SIZE : blockIdx.x*TILE_SIZE + TILE_SIZE)
+ */
+__global__ void qkt_paged_attention(
+    const float* q, const float** page_table, const int* lengths,
+    float* qkt,
+    int n_batch, int n_sequence, int emb_dim) {
+    
+    __shared__ float q_shared[TILE_SIZE];
+    __shared__ float k_shared[TILE_SIZE][TILE_SIZE];
+    __shared__ float result_shared[TILE_SIZE];
+    int batch_i = blockIdx.y;
+    int result_col = blockIdx.x * TILE_SIZE + threadIdx.x;
+    int cur_batch_length = lengths[batch_i];
+    // all threads in this block exceed the cur_batch_lenght, no need to calculate
+    if (blockIdx.x * TILE_SIZE >= cur_batch_length) {
+        return;
+    }
+    result_shared[threadIdx.x] = 0.0f;
+
+    const float* base_q = q + batch_i * emb_dim;
+
+    for (int i = 0; i < emb_dim; i += TILE_SIZE) {
+        if (i + threadIdx.x < emb_dim) {
+            q_shared[threadIdx.x] = base_q[i + threadIdx.x];
+        } else {
+            q_shared[threadIdx.x] = 0.0f;
+        }
+        
+        for (int i_sequence = blockIdx.x * TILE_SIZE; i_sequence < blockIdx.x * TILE_SIZE + TILE_SIZE && i_sequence < cur_batch_length; i_sequence++) {
+            if (i + threadIdx.x < emb_dim) {
+                k_shared[i_sequence][threadIdx.x] = get_k_cache(
+                    page_table, batch_i, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x);
+            } else {
+                k_shared[i_sequence][threadIdx.x] = 0.0f;
+            }
+        }
+        __syncthreads();
+        for (int j = 0; result_col < cur_batch_length && j < TILE_SIZE; ++j) {
+            result_shared[threadIdx.x] += (q_shared[j] * k_shared[threadIdx.x][j]);
+        }
+        __syncthreads();
+    }
+
+    if (result_col < cur_batch_length) {
+        qkt[batch_i * n_sequence + result_col] = result_shared[threadIdx.x] / sqrtf(emb_dim);
+    }
+}
+
+/**
+ * softmax_result: [n_batch, n_sequence] 
+ * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
+ * softmax_v_result: [n_batch, emb_dim]
+ */
+__global__ void softmax_v_paged_attention(
+    const float* softmax_result, const float** page_table,
+    float* softmax_v_result,
+    const int* lengths,
+    int n_batch, int n_sequence, int emb_dim) {
+
+    int i_batch = blockIdx.y;
+    __shared__ float softmax_res_share[TILE_SIZE_SQUARE];
+    float result = 0.0;
+
+    int cur_batch_length = lengths[i_batch];
+    const float* softmax_result_base = softmax_result + i_batch * n_sequence;
+    int write_col = blockIdx.x * TILE_SIZE_SQUARE + threadIdx.x;
+
+    for (int i = 0; i < cur_batch_length; i += TILE_SIZE_SQUARE) {
+        if (i + threadIdx.x < cur_batch_length) {
+            softmax_res_share[threadIdx.x] = softmax_result_base[i + threadIdx.x];
+        } else {
+            softmax_res_share[threadIdx.x] = 0.0f;
+        }
+        __syncthreads();
+        for (int j = 0; write_col < emb_dim && j < TILE_SIZE_SQUARE && i + j < cur_batch_length; ++j) {
+            result += (softmax_res_share[j] * get_v_cache(page_table, i_batch, n_sequence, i + j, emb_dim, PAGE_BLOCK_SIZE, write_col));
+        }
+        __syncthreads();
+    }
+    if (write_col < emb_dim) {
+        softmax_v_result[i_batch * emb_dim + write_col] = result;
+    }
+}
+
+/**
+ * - page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE], input_embedding + k_cache + v_cache
+ *      Each pointer points to a memory block of (3 * embedding_dim * PAGE_BLOCK_SIZE)
+ * - lengths: [n_batch], the token lengths for each batch
+ * - wk, wq, wv: [emb_dim, emb_dim]: since we don't have the following feed-forward layer, 
+ * input_dim should be equal to output_dim
+ * - new_batch_idx: [n_batch], but only n_new_items are used
+ * - q_output: [n_batch, emb_dim]
+ * - qkt_output: [n_batch, n_sequence]
+ * - attention_result: [n_batch, emb_dim]
+ */
+void paged_attention(
+    const TensorFloatPoint& page_table,
+    const TensorInt& lengths,
+    const TensorFloat& wk,
+    const TensorFloat& wq,
+    const TensorFloat& wv,
+    const TensorInt& new_batch_idx,
+    TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result,
+    int n_new_item) {
+
+}
