@@ -4,7 +4,7 @@
 #include <gtest/gtest.h>
 
 TEST(InferencerTest, InferencerTest) {
-    size_t n_batch = get_random_number(32, 100) * 4;
+    size_t n_batch = get_random_number(32, 128);
     size_t n_sequence = get_random_number(32, 100) * 4;
     size_t n_vocab = get_random_number(EOF_TOKEN_ID + 1, EOF_TOKEN_ID + 1024);
     size_t emb_dims = get_random_number(256, 512) * 4;

@@ -1,8 +1,6 @@
 #include "items_storage.h"
 #include "constants.h"
 #include <cassert>
-#include <iostream>
-#include <ostream>
 #include <utility>
 #include <vector>
 
@@ -39,12 +37,16 @@ int ItemStorage::new_count() const {
 }
 
 std::vector<IdTokensPair> Storage::pop_pairs(int size) {
-    std::vector<IdTokensPair> to_pop;
-    for (int i = 0; i < size && !data_.empty(); ++i) {
-        to_pop.push_back(data_.front());
-        data_.erase(data_.begin());
+    if (size > data_.size()) {
+        size = data_.size();
     }
-    return to_pop;
+    std::vector<IdTokensPair> result;
+    auto it = data_.begin();
+    for (int i = 0; i < size; ++i) {
+        result.push_back(std::move(*it));
+        it = data_.erase(it);
+    }
+    return result;
 }
 
 void ProcessingStorage::put(int batch_index, IdTokensPair&& tokens) {
@@ -68,8 +70,22 @@ void ProcessingStorage::move_to_finished(int batch_id, ItemStorage& item_storage
     batch_id_to_token_pairs_.erase(it);
 }
 
+void ProcessingStorage::move_to_new(int batch_id, ItemStorage& item_storage) {
+    auto it = batch_id_to_token_pairs_.find(batch_id);
+    item_storage.add_new_item_to_head(std::move(it->second));
+    batch_id_to_token_pairs_.erase(it); 
+}
+
 void Storage::add(IdTokensPair&& to_add) {
     data_.push_back(std::move(to_add));
+}
+
+int Storage::head_length() const {
+    return data_.begin()->second.size();
+}
+
+int ItemStorage::head_length() const {
+    return new_items_.head_length();
 }
 
 bool ProcessingStorage::batch_id_processing(int batch_id) {
@@ -87,13 +103,11 @@ std::vector<int> process_decoder_result(
         if (decode_result_data[i] == EMPTY_ROW_TOKEN_ID) {
             assert(!processing_storage.batch_id_processing(i));
             finished_indices.push_back(i);
-        } else if (decode_result_data[i] == EOF_TOKEN_ID) {
-            append_token_to_id_string_pair(processing_storage.get_token(i), decode_result_data[i]);
-            processing_storage.move_to_finished(i, item_storage);
-            finished_indices.push_back(i);
         } else {
             append_token_to_id_string_pair(processing_storage.get_token(i), decode_result_data[i]);
-            if (processing_storage.get_token(i).second.size() >= n_sequence) {
+            if (processing_storage.get_token(i).second.size() >= n_sequence
+                || decode_result_data[i] == EOF_TOKEN_ID) {
+
                 finished_indices.push_back(i);
                 processing_storage.move_to_finished(i, item_storage);
             }
@@ -128,6 +142,7 @@ int insert_new_items(
         if (i >= new_item_pairs.size()) {
             lengths_data[batch_idx] = 0;
         } else {
+            assert(new_item_pairs[i].second.size() + 1 <= n_sequence);
             lengths_data[batch_idx] = new_item_pairs[i].second.size();
             std::copy(
                 new_item_pairs[i].second.begin(), new_item_pairs[i].second.end(),
@@ -148,4 +163,20 @@ int ProcessingStorage::size() const {
 
 bool is_done(ItemStorage& item_storage, ProcessingStorage& processing_storage) {
     return processing_storage.size() + item_storage.new_count() == 0;
+}
+
+void Storage::add_to_front(IdTokensPair&& pair) {
+    data_.push_front(std::move(pair));
+}
+
+void ItemStorage::add_new_item_to_head(IdTokensPair&& pair) {
+    new_items_.add_to_front(std::move(pair));
+}
+
+const IdTokensPair& ItemStorage::get_top() const {
+    return new_items_.get_top();
+}
+
+const IdTokensPair& Storage::get_top() const {
+    return data_.front();
 }

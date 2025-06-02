@@ -68,32 +68,17 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-# Discover all test cpp files (e.g., *_test.cpp only)
-add_library(test_utils STATIC ${TESTS_DIR}/test_utils.cpp)
-
-target_include_directories(test_utils
-    PUBLIC 
-    ${TESTS_DIR}/include
-    ${INCLUDE_DIR}
-    ${CUDAToolkit_INCLUDE_DIRS}
-)
-
-target_link_libraries(test_utils
-    PUBLIC gtest_main
-)
-
 file(GLOB TEST_SOURCES "${TESTS_DIR}/*_test.cpp")
 
 foreach(TEST_SRC ${TEST_SOURCES})
     # extract just the filename without extension (e.g. feed_forward_test)
     get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
 
-    add_executable(${TEST_NAME} ${TEST_SRC})
+    add_executable(${TEST_NAME} ${TEST_SRC} ${TESTS_DIR}/test_utils.cpp)
 
     target_link_libraries(${TEST_NAME}
         min_llm_inference
         gtest_main
-        test_utils
     )
 
     # Add tests/include directory as *PRIVATE* to each test target

@@ -314,3 +314,4 @@ SyncTensorData<T>::~SyncTensorData() {
 
 typedef Tensor<float> TensorFloat;
 typedef Tensor<int> TensorInt;
+typedef Tensor<float*> TensorFloatPoint;

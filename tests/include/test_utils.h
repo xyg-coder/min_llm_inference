@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include "items_storage.h"
+#include "paged_item_storage.h"
 #include "tensor.hpp"
 #include <utility>
 #include <vector>
@@ -68,3 +70,18 @@ void decoder_host(
 TensorFloat mock_emb_table(int n_vocab, int embedding_dims);
 
 TensorFloat mock_pos_table(int n_sequence, int embedding_dims);
+
+class PagedAttentionTestWrapper {
+public:
+    PagedAttentionTestWrapper(
+        PagedAttentionsManager&&, MemoryBlockManager&&, ProcessingStorage&&, ItemStorage&&, std::vector<IdTokensPair>&&);
+    PagedAttentionsManager paged_attention_manager;
+    MemoryBlockManager memory_block_manager;
+    ProcessingStorage processing_storage;
+    ItemStorage item_storage;
+    std::vector<IdTokensPair> tokens;
+};
+
+PagedAttentionTestWrapper mock_paged_attention_test_wrapper(
+    size_t max_batches, size_t n_sequence, size_t emb_dim, int n_blocks,
+    const std::vector<int>& new_items_lengths);

@@ -1,17 +1,15 @@
 #include "test_utils.h"
 #include "constants.h"
 #include "include/test_utils.h"
-#include "inference_model.h"
 #include "kernels/rand_assign.h"
 #include "kernels/utils.cuh"
-#include "layers.h"
 #include "items_storage.h"
+#include "paged_item_storage.h"
 #include "tensor.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cfloat>
 #include <cmath>
-#include <cstddef>
 #include <cstdio>
 #include <random>
 #include <gtest/gtest.h>
@@ -640,3 +638,37 @@ TensorFloat mock_pos_table(int n_sequence, int embedding_dims) {
     launch_randn_kernel(device_tensor.data(), device_tensor.get_total_size());
     return device_tensor;
 }
+
+PagedAttentionTestWrapper mock_paged_attention_test_wrapper(
+    size_t max_batches, size_t n_sequence, size_t emb_dim, int n_blocks,
+    const std::vector<int>& new_items_lengths) {
+
+    PagedAttentionsManager paged_attention_manager(max_batches, n_sequence, emb_dim);
+    MemoryBlockManager memory_block_manager(n_blocks, PAGE_BLOCK_SIZE * 3 * emb_dim);
+    ProcessingStorage processing_storage;
+    ItemStorage item_storage;
+    std::vector<IdTokensPair> token_pairs;
+
+    for (int i = 0; i < new_items_lengths.size(); ++i) {
+        token_pairs.push_back(std::make_pair(i, create_random_vector(new_items_lengths[i], 0, EOF_TOKEN_ID - 1)));
+        item_storage.add_new_item(IdTokensPair(token_pairs[i]));
+    }
+
+    return PagedAttentionTestWrapper(
+        std::move(paged_attention_manager),
+        std::move(memory_block_manager),
+        std::move(processing_storage),
+        std::move(item_storage),
+        std::move(token_pairs));
+}
+
+PagedAttentionTestWrapper::PagedAttentionTestWrapper(
+    PagedAttentionsManager&& paged_attention_manager,
+    MemoryBlockManager&& memory_block_manager,
+    ProcessingStorage&& processing_storage,
+    ItemStorage&& item_storage, std::vector<IdTokensPair>&& tokens):
+        paged_attention_manager(std::move(paged_attention_manager)),
+        memory_block_manager(std::move(memory_block_manager)),
+        processing_storage(std::move(processing_storage)),
+        item_storage(std::move(item_storage)),
+        tokens(std::move(tokens)) { }
