@@ -19,7 +19,7 @@ void allocate_or_free_memory_blocks_if_needed(
 
     // 1. iterate over the finished indices and free them
     std::unordered_set<int> finished_indices_set(finished_indices.begin(), finished_indices.end());
-    auto used_blocks = paged_attention_manager.get_used_block_list();
+    std::list<BatchIdMemoryBlocksPair>& used_blocks = paged_attention_manager.get_used_block_list();
     for (auto it = used_blocks.begin(); it != used_blocks.end();) {
         if (finished_indices_set.find(it->first) != finished_indices_set.end()) {
             memory_block_manager.return_free_blocks(std::move(it->second));
@@ -51,6 +51,8 @@ void allocate_or_free_memory_blocks_if_needed(
                 processing_storage.move_to_new(to_remove.first, item_storage);
                 memory_block_manager.return_free_blocks(std::move(it->second));
             }
+        } else {
+            it++;
         }
     }
 }
@@ -90,11 +92,11 @@ std::vector<int> insert_new_items(
             std::copy(
                 popped.second.begin(), popped.second.end(),
                 inp_data + i * n_sequence);
-            processing_storage.put(i, std::move(popped));
             new_items_indices_data[insert_index++] = i;
             int n_blocks = std::max(
-                ceil_div(std::min(item_storage.head_length() + 1, n_sequence), PAGE_BLOCK_SIZE),
+                ceil_div(popped.second.size() + 1, PAGE_BLOCK_SIZE),
                 DEFAULT_INIT_NUM_BLOCKS);
+            processing_storage.put(i, std::move(popped));
 
             paged_attention_manager.add_batch_block_pair(std::make_pair(
                 i, memory_block_manager.pop_free_blocks(n_blocks)));

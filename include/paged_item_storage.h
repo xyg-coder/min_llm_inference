@@ -46,7 +46,7 @@ private:
 void allocate_memory_block(MemoryBlockManager&, PagedAttentionsManager&, BatchIdMemoryBlocksPair&);
 
 void allocate_or_free_memory_blocks_if_needed(PagedAttentionsManager&, MemoryBlockManager&,
-    ProcessingStorage&, std::vector<int>& finished_indices);
+    ProcessingStorage&, ItemStorage&, const std::vector<int>& finished_indices);
 
 std::vector<int> insert_new_items(
     TensorInt& inp_device, TensorInt& inp_host,
