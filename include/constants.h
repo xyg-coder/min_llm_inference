@@ -12,3 +12,7 @@ constexpr int EOF_TOKEN_ID = 1023;
 constexpr int PAGE_BLOCK_SIZE = 16;
 
 constexpr int DEFAULT_INIT_NUM_BLOCKS = 16;
+
+constexpr int INP_EMB_EMB_OFFSET = 0;
+constexpr int K_CACHE_EMB_OFFSET = 1;
+constexpr int V_CACHE_EMB_OFFSET = 2;

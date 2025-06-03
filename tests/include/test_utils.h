@@ -25,6 +25,7 @@ public:
 
 std::pair<TensorFloat, TensorFloat> get_random_device_host_tensor(const std::vector<size_t>& shape, float ratio = 1);
 TensorFloat get_random_device_tensor(const std::vector<size_t>& shape, float ratio = 1);
+TensorFloat get_random_device_tensor(const std::vector<size_t>& shape, int max_val);
 
 std::pair<TensorInt, TensorInt> get_random_device_host_tensor_int(const std::vector<size_t>& shape, int max_val);
 
@@ -104,4 +105,5 @@ public:
     int n_new_batches; 
 };
 
-TensorWrapForInferenceOptimizedSelfAttention generate_paged_attention_wrapper_device_tensors(size_t n_batch=1024, size_t n_sequence=1024, size_t emb_dim=32);
+// TODO: make page table only includes the lengths. Don't over-allocate. So we can find the possibel illegal memory.
+TensorWrapperForPagedAttention generate_paged_attention_wrapper_device_tensors(size_t n_batch=1024, size_t n_sequence=1024, size_t emb_dim=32);

@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 #include "self_attention_inference_optimized_host.h"
+#include "utils.h"
 
 /**
  * inp: [n_batch, n_sequence, input_dim]
@@ -81,6 +82,16 @@ TensorFloat get_random_device_tensor(const std::vector<size_t> &shape, float rat
     TensorFloat device_tensor(shape, DeviceType::DEVICE);
     size_t total_size = device_tensor.get_total_size();
     launch_randn_kernel(device_tensor.data(), total_size, ratio);
+    return device_tensor;
+}
+
+TensorInt get_random_device_tensor_int(const std::vector<size_t> &shape, int max_val) {
+    TensorInt device_tensor(shape, DeviceType::DEVICE);    
+    size_t total_size = 1;
+    for (size_t dim : shape) {
+        total_size *= dim;
+    }
+    launch_randn_kernel(device_tensor.data(), total_size, max_val);
     return device_tensor;
 }
 
@@ -672,3 +683,73 @@ PagedAttentionTestWrapper::PagedAttentionTestWrapper(
         processing_storage(std::move(processing_storage)),
         item_storage(std::move(item_storage)),
         tokens(std::move(tokens)) { }
+
+TensorWrapperForPagedAttention generate_paged_attention_wrapper_device_tensors(size_t n_batch, size_t n_sequence, size_t emb_dim) {
+    auto lengths_device_host = get_random_device_host_tensor_int({n_batch}, n_sequence - 1);
+    assert(n_sequence % PAGE_BLOCK_SIZE == 0);
+    int total_length = 0;
+    int* length_data = lengths_device_host.second.data();
+    for (int i = 0; i < n_batch; ++i) {
+        total_length += ceil_div(length_data[i] + 1, PAGE_BLOCK_SIZE) * PAGE_BLOCK_SIZE;
+    }
+    TensorFloat page_table_memory({total_length * 3 * emb_dim}, DeviceType::DEVICE);
+    float* page_table_mem_data = page_table_memory.data();
+    std::vector<float*> all_blocks;
+    for (int i = 0; i < total_length; ++i) {
+        all_blocks.push_back(page_table_mem_data + i * PAGE_BLOCK_SIZE * 3 * emb_dim);
+    }
+    std::random_device rd;
+    std::mt19937 g(rd());
+
+    // Shuffle the vector
+    std::shuffle(all_blocks.begin(), all_blocks.end(), g);
+    size_t width = n_sequence / PAGE_BLOCK_SIZE;
+    TensorFloatPoint page_table_host({n_batch, width}, DeviceType::HOST);
+    float** page_table_host_data = page_table_host.data();
+    auto cur_block_i = all_blocks.begin();
+    for (int i = 0; i < n_batch; ++i) {
+        // length_data[i] == 0 means this is empty row
+        if (length_data[i] == 0) {
+            continue;
+        }
+        for (int j = 0; j < ceil_div(length_data[i] + 1, PAGE_BLOCK_SIZE); ++j) {
+            page_table_host_data[i * width + j] = *cur_block_i;
+            cur_block_i++;
+        }
+    }
+    TensorFloatPoint page_table_device({n_batch, width}, DeviceType::DEVICE);
+    page_table_device.copy_from(page_table_host);
+
+    int n_new_batches = get_random_number(1, n_batch);
+    std::vector<int> new_batch_indices = get_unique_num_array(0, n_batch - 1, n_new_batches);
+    auto inp = get_random_device_tensor({n_batch, n_sequence, emb_dim});
+    auto wk = get_random_device_tensor({emb_dim, emb_dim});
+    auto wq = get_random_device_tensor({emb_dim, emb_dim});
+    auto wv = get_random_device_tensor({emb_dim, emb_dim});
+    auto new_batch_idx_device_host = get_random_device_host_tensor_int({n_batch}, n_batch - 1);
+    std::copy(new_batch_indices.begin(), new_batch_indices.end(), new_batch_idx_device_host.second.data());
+    new_batch_idx_device_host.first.copy_from(new_batch_idx_device_host.second);
+
+    auto q_output = get_random_device_tensor({n_batch, emb_dim});
+    auto qkt_output = get_random_device_tensor({n_batch, n_sequence});
+    auto attention_result = get_random_device_tensor({n_batch, emb_dim});
+    auto kt_cache = get_random_device_tensor({n_batch, emb_dim, n_sequence});
+    auto v_cache = get_random_device_tensor({n_batch, n_sequence, emb_dim});
+
+    return TensorWrapperForPagedAttention{
+        std::move(inp),
+        std::move(lengths_device_host.first),
+        std::move(wk),
+        std::move(wq),
+        std::move(wv),
+        std::move(new_batch_idx_device_host.first),
+        std::move(page_table_memory),
+        std::move(page_table_device),
+        std::move(q_output),
+        std::move(qkt_output),
+        std::move(attention_result),
+        std::move(kt_cache),
+        std::move(v_cache),
+        n_new_batches
+    };
+}

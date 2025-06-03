@@ -3,47 +3,6 @@
 #include "utils.h"
 #include <cassert>
 
-__device__ __inline__ float get_inp_embedding(
-    float** page_table, int i_batch, int n_sequence, int i_sequence, int emb_dim, int page_block_size, int i_dim) {
-    
-    int page_table_width = n_sequence / page_block_size;
-    const float* page_pos = page_table[i_batch * page_table_width + i_sequence / page_block_size];
-    return page_pos[(i_sequence % page_block_size) * emb_dim * 3 + i_dim];
-}
-
-__device__ __inline__ void set_k_cache(
-    float** page_table, int i_batch, int n_sequence, int i_sequence, int emb_dim, int page_block_size, int i_dim,
-    float value) {
-    
-    int page_table_width = n_sequence / page_block_size;
-    float* page_pos = page_table[i_batch * page_table_width + i_sequence / page_block_size];
-    page_pos[(i_sequence % page_block_size) * emb_dim * 3 + emb_dim + i_dim] = value;
-}
-
-__device__ __inline__ float get_k_cache(
-    const float** page_table, int i_batch, int n_sequence, int i_sequence, int emb_dim, int page_block_size, int i_dim) {
-    
-    int page_table_width = n_sequence / page_block_size;
-    const float* page_pos = page_table[i_batch * page_table_width + i_sequence / page_block_size];
-    return page_pos[(i_sequence % page_block_size) * emb_dim * 3 + emb_dim + i_dim];
-}
-
-__device__ __inline__ void set_v_cache(
-    float** page_table, int i_batch, int n_sequence, int i_sequence, int emb_dim, int page_block_size, int i_dim,
-    float value) {
-    
-    int page_table_width = n_sequence / page_block_size;
-    float* page_pos = page_table[i_batch * page_table_width + i_sequence / page_block_size];
-    page_pos[(i_sequence % page_block_size) * emb_dim * 3 + emb_dim * 2 + i_dim] = value;
-}
-
-__device__ __inline__ float get_v_cache(
-    const float** page_table, int i_batch, int n_sequence, int i_sequence, int emb_dim, int page_block_size, int i_dim) {
-    
-    int page_table_width = n_sequence / page_block_size;
-    const float* page_pos = page_table[i_batch * page_table_width + i_sequence / page_block_size];
-    return page_pos[(i_sequence % page_block_size) * emb_dim * 3 + emb_dim * 2 + i_dim];
-}
 
 /**
  * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
@@ -80,9 +39,9 @@ __global__ void fill_new_k_v_cache_paged_attention(
 
     for (int i = 0; i < emb_dim; i += TILE_SIZE) {
         if (output_row_idx < cur_batch_length && i + threadIdx.x < emb_dim) {
-            inp_shared[threadIdx.y][threadIdx.x] = get_inp_embedding(
-                page_table, batch_idx, n_sequence, output_row_idx, emb_dim, PAGE_BLOCK_SIZE,
-                i + threadIdx.x);
+            inp_shared[threadIdx.y][threadIdx.x] = get_page_table_value(
+                (const float**)page_table, batch_idx, n_sequence, output_row_idx, emb_dim, PAGE_BLOCK_SIZE,
+                i + threadIdx.x, INP_EMB_EMB_OFFSET);
         } else {
             inp_shared[threadIdx.y][threadIdx.x] = 0.0f;
         }
@@ -112,10 +71,10 @@ __global__ void fill_new_k_v_cache_paged_attention(
         __syncthreads();
     }
     if (output_row_idx < cur_batch_length && output_col_idx < emb_dim) {
-        set_k_cache(page_table, batch_idx, n_sequence, output_row_idx, emb_dim,
-            PAGE_BLOCK_SIZE, output_col_idx, k_result);
-        set_k_cache(page_table, batch_idx, n_sequence, output_row_idx, emb_dim,
-            PAGE_BLOCK_SIZE, output_col_idx, v_result);
+        set_page_table_value(page_table, batch_idx, n_sequence, output_row_idx, emb_dim,
+            PAGE_BLOCK_SIZE, output_col_idx, K_CACHE_EMB_OFFSET, k_result);
+        set_page_table_value(page_table, batch_idx, n_sequence, output_row_idx, emb_dim,
+            PAGE_BLOCK_SIZE, output_col_idx, V_CACHE_EMB_OFFSET, v_result);
     }
 }
 
@@ -176,7 +135,7 @@ __global__ void get_latest_k_q_v_paged_attention(
 
     for (int i = 0; i < emb_dim; i += TILE_SIZE_SQUARE) {
         if (i + threadIdx.x < emb_dim) {
-            inp_shared[threadIdx.x] = get_inp_embedding(page_table, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x);
+            inp_shared[threadIdx.x] = get_page_table_value((const float**)page_table, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x, INP_EMB_EMB_OFFSET);
         } else {
             inp_shared[threadIdx.x] = 0.0f;
         }
@@ -192,8 +151,8 @@ __global__ void get_latest_k_q_v_paged_attention(
         __syncthreads();
     }
     if (output_col_idx < emb_dim) {
-        set_v_cache(page_table, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, v_result);
-        set_k_cache(page_table, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, k_result);
+        set_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, K_CACHE_EMB_OFFSET, k_result);
+        set_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, V_CACHE_EMB_OFFSET, v_result);
         q_output[i_batch * emb_dim + output_col_idx] = q_result;
     }
 }
@@ -233,8 +192,8 @@ __global__ void qkt_paged_attention(
         
         for (int i_sequence = blockIdx.x * TILE_SIZE; i_sequence < blockIdx.x * TILE_SIZE + TILE_SIZE && i_sequence < cur_batch_length; i_sequence++) {
             if (i + threadIdx.x < emb_dim) {
-                k_shared[i_sequence][threadIdx.x] = get_k_cache(
-                    page_table, batch_i, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x);
+                k_shared[i_sequence][threadIdx.x] = get_page_table_value(
+                    page_table, batch_i, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x, K_CACHE_EMB_OFFSET);
             } else {
                 k_shared[i_sequence][threadIdx.x] = 0.0f;
             }
@@ -278,7 +237,7 @@ __global__ void softmax_v_paged_attention(
         }
         __syncthreads();
         for (int j = 0; write_col < emb_dim && j < TILE_SIZE_SQUARE && i + j < cur_batch_length; ++j) {
-            result += (softmax_res_share[j] * get_v_cache(page_table, i_batch, n_sequence, i + j, emb_dim, PAGE_BLOCK_SIZE, write_col));
+            result += (softmax_res_share[j] * get_page_table_value(page_table, i_batch, n_sequence, i + j, emb_dim, PAGE_BLOCK_SIZE, write_col, V_CACHE_EMB_OFFSET));
         }
         __syncthreads();
     }
