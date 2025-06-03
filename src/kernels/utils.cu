@@ -1,6 +1,7 @@
 #include "constants.h"
 #include "kernels/utils.cuh"
 #include "utils.h"
+#include <cassert>
 #include <cmath>
 #include <cuda_runtime.h>
 #include <stdexcept>
@@ -47,9 +48,11 @@ __global__ void compare_page_table(const float** page_table, const float* to_com
     if (i_sequence >= batch_length || i_dim >= emb_dim) {
         return;
     }
+    printf("%d, %d, %d, %f\n", i_batch, i_sequence, i_dim,
+        get_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, page_block_size, i_dim, emb_offset));
     if (fabsf(to_compare_with[i_batch * n_sequence * emb_dim + i_sequence * emb_dim + i_dim] -
         get_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, page_block_size, i_dim, emb_offset)) > threshold) {
-        
+
         *exception_flag = 1;
     }
 }
@@ -109,7 +112,29 @@ void assert_int_kernel_close(const int* data1, const int* data2, int size) {
     }
 }
 
-// emb_offset==0: inp_emb
-// emb_offset==1: k_cache. For k_cache, we will compare with kt_cache
-// emb_offset==2: v_cache
-void assert_page_table_close(const float** page_table, const float* to_compare_with, const int*lengths, int n_batch, int n_sequence, int emb_offset);
+void assert_page_table_close(
+    const float** page_table, const float* to_compare_with, const int*lengths,
+    int n_batch, int n_sequence, int emb_offset, int emb_dim, float threshold) {
+    
+    assert(emb_offset == K_CACHE_EMB_OFFSET || emb_offset == V_CACHE_EMB_OFFSET || emb_offset == INP_EMB_EMB_OFFSET);
+    int *d_exception_flag, h_exception_flag = 0;
+    cudaMalloc(&d_exception_flag, sizeof(int));
+    cudaMemcpy(d_exception_flag, &h_exception_flag, sizeof(int), cudaMemcpyHostToDevice);
+    if (emb_offset == K_CACHE_EMB_OFFSET) {
+        dim3 gridDim(ceil_div(emb_dim, TILE_SIZE), ceil_div(n_sequence, TILE_SIZE), n_batch);
+        dim3 blockDim(TILE_SIZE, TILE_SIZE);
+        compare_page_table_transpose<<<gridDim, blockDim>>>(page_table, to_compare_with, lengths, n_batch, n_sequence, PAGE_BLOCK_SIZE,
+            emb_offset, emb_dim, threshold, d_exception_flag);
+
+    } else {
+        dim3 gridDim(ceil_div(emb_dim, TILE_SIZE_SQUARE), n_sequence, n_batch);
+        compare_page_table<<<gridDim, TILE_SIZE_SQUARE>>>(
+            page_table, to_compare_with, lengths, n_batch, n_sequence, PAGE_BLOCK_SIZE,
+            emb_offset, emb_dim, threshold, d_exception_flag);
+    }
+    CUDA_CHECK_LAST();
+    cudaMemcpy(&h_exception_flag, d_exception_flag, sizeof(int), cudaMemcpyDeviceToHost);
+    if (h_exception_flag) {
+        throw std::runtime_error("2 arrays are not close");
+    }
+}

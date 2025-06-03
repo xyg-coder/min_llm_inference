@@ -105,5 +105,4 @@ public:
     int n_new_batches; 
 };
 
-// TODO: make page table only includes the lengths. Don't over-allocate. So we can find the possibel illegal memory.
 TensorWrapperForPagedAttention generate_paged_attention_wrapper_device_tensors(size_t n_batch=1024, size_t n_sequence=1024, size_t emb_dim=32);

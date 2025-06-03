@@ -4,7 +4,11 @@ all: build test
 
 build:
 	mkdir -p build
-	cd build && cmake .. && make
+	cd build && cmake -DDEBUG_MODE=OFF .. && make
+
+debug_build:
+	mkdir -p build
+	cd build && cmake -DDEBUG_MODE=ON .. && make
 
 test:
 	cd build && ctest
