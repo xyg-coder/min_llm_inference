@@ -85,3 +85,23 @@ public:
 PagedAttentionTestWrapper mock_paged_attention_test_wrapper(
     size_t max_batches, size_t n_sequence, size_t emb_dim, int n_blocks,
     const std::vector<int>& new_items_lengths);
+
+class TensorWrapperForPagedAttention {
+public:
+    TensorFloat inp;
+    TensorInt lengths;
+    TensorFloat wk;
+    TensorFloat wq;
+    TensorFloat wv;
+    TensorInt new_batch_idx;
+    TensorFloat page_table_memory;
+    TensorFloatPoint page_table;
+    TensorFloat q_output;
+    TensorFloat qkt_output;
+    TensorFloat attention_result;
+    TensorFloat kt_cache;
+    TensorFloat v_cache;
+    int n_new_batches; 
+};
+
+TensorWrapForInferenceOptimizedSelfAttention generate_paged_attention_wrapper_device_tensors(size_t n_batch=1024, size_t n_sequence=1024, size_t emb_dim=32);

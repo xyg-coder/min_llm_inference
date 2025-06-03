@@ -1,6 +1,7 @@
 #include "constants.h"
 #include "tensor.hpp"
-#include <__clang_cuda_builtin_vars.h>
+#include "utils.h"
+#include <cassert>
 
 __device__ __inline__ float get_inp_embedding(
     float** page_table, int i_batch, int n_sequence, int i_sequence, int emb_dim, int page_block_size, int i_dim) {
@@ -116,6 +117,34 @@ __global__ void fill_new_k_v_cache_paged_attention(
         set_k_cache(page_table, batch_idx, n_sequence, output_row_idx, emb_dim,
             PAGE_BLOCK_SIZE, output_col_idx, v_result);
     }
+}
+
+/**
+ * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
+ * new_batch_idx: [n_new_batch]
+ * lengths: [n_batch]
+ * wk: [emb_dim, emb_dim]
+ * wv: [emb_dim, emb_dim]
+ */
+void launch_fill_new_k_v_cache_paged_attention(
+    TensorFloatPoint page_table, const TensorInt& new_batch_idx, const TensorInt& lengths,
+    const TensorFloat& wk, const TensorFloat& wv, int n_new_items, int n_sequence) {
+
+    if (n_new_items == 0) {
+        return;
+    }
+
+    int n_batch = page_table.shape()[0];
+    assert(page_table.shape()[1] == n_sequence / PAGE_BLOCK_SIZE && n_sequence % PAGE_BLOCK_SIZE == 0);
+    int emb_dim = wk.shape()[0];
+    assert(wk.shape()[0] == wk.shape()[1]);
+    dim3 blockDim(TILE_SIZE, TILE_SIZE);
+    dim3 gridDim(
+        (emb_dim + TILE_SIZE - 1) / TILE_SIZE, (n_sequence + TILE_SIZE - 1) / TILE_SIZE, n_new_items);
+    fill_new_k_v_cache_paged_attention<<<gridDim, blockDim>>>(
+        page_table.data(), new_batch_idx.data(),
+        lengths.data(), wk.data(), wv.data(), n_sequence, emb_dim);
+    CUDA_CHECK_LAST();
 }
 
 /**

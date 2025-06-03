@@ -20,3 +20,8 @@ void launch_paged_attention_kernels(
     TensorFloatPoint v_cache,
     TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result,
     int n_new_items, int n_batch);
+
+
+void launch_fill_new_k_v_cache_paged_attention(
+    TensorFloatPoint page_table, const TensorInt& new_batch_idx, const TensorInt& lengths,
+    const TensorFloat& wk, const TensorFloat& wv, int n_new_items, int n_sequence);
