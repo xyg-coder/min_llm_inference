@@ -61,3 +61,7 @@ public:
     NonCopyableNonClonable(const NonCopyableNonClonable&) = delete;
     NonCopyableNonClonable& operator=(const NonCopyableNonClonable&) = delete;
 };
+
+void launch_clone_inp_embedding_k_v_cache(
+    float** page_table, const float* inp_embedding, const float* kt_cache,
+    const float* v_cache, const int* lengths, int n_batch, int n_sequence, int emb_dim);

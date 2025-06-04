@@ -722,7 +722,7 @@ TensorWrapperForPagedAttention generate_paged_attention_wrapper_device_tensors(s
 
     int n_new_batches = get_random_number(1, n_batch);
     std::vector<int> new_batch_indices = get_unique_num_array(0, n_batch - 1, n_new_batches);
-    auto inp = get_random_device_tensor({n_batch, n_sequence, emb_dim});
+    auto inp_embedding = get_random_device_tensor({n_batch, n_sequence, emb_dim});
     auto wk = get_random_device_tensor({emb_dim, emb_dim});
     auto wq = get_random_device_tensor({emb_dim, emb_dim});
     auto wv = get_random_device_tensor({emb_dim, emb_dim});
@@ -736,8 +736,11 @@ TensorWrapperForPagedAttention generate_paged_attention_wrapper_device_tensors(s
     auto kt_cache = get_random_device_tensor({n_batch, emb_dim, n_sequence});
     auto v_cache = get_random_device_tensor({n_batch, n_sequence, emb_dim});
 
+    launch_clone_inp_embedding_k_v_cache(
+        page_table_device.data(), inp_embedding.data(), kt_cache.data(), v_cache.data(), lengths_device_host.first.data(), n_batch, n_sequence, emb_dim);
+
     return TensorWrapperForPagedAttention{
-        std::move(inp),
+        std::move(inp_embedding),
         std::move(lengths_device_host.first),
         std::move(wk),
         std::move(wq),

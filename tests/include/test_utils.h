@@ -89,7 +89,7 @@ PagedAttentionTestWrapper mock_paged_attention_test_wrapper(
 
 class TensorWrapperForPagedAttention {
 public:
-    TensorFloat inp;
+    TensorFloat inp_embedding;
     TensorInt lengths;
     TensorFloat wk;
     TensorFloat wq;

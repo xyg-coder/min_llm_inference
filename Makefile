@@ -18,12 +18,12 @@ all_test: build_async_flag_on build_async_flag_off
 build_async_flag_on:
 	rm -rf build
 	mkdir -p build
-	cd build && cmake -DUSE_ASYNC_ALLOC=ON .. && make && ctest
+	cd build && cmake -DUSE_ASYNC_ALLOC=ON -DDEBUG_MODE=OFF .. && make && ctest
 
 build_async_flag_off:
 	rm -rf build
 	mkdir -p build
-	cd build && cmake -DUSE_ASYNC_ALLOC=OFF .. && make && ctest
+	cd build && cmake -DUSE_ASYNC_ALLOC=OFF -DDEBUG_MODE=OFF .. && make && ctest
 
 clean:
 	rm -rf build

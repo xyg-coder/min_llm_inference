@@ -13,15 +13,22 @@
  * qkt_output: [n_batch, n_sequence]
  * attention_result: [n_batch, input_dim]
  */
-void launch_paged_attention_kernels(
-    const TensorFloatPoint& inp_embedding, const TensorInt& lengths,
-    const TensorFloat& wk, const TensorFloat& wq, const TensorFloat& wv,
-    const TensorInt& new_batch_idx, TensorFloatPoint& k_cache,
-    TensorFloatPoint v_cache,
+void paged_attention(
+    TensorFloatPoint& page_table,
+    const TensorInt& lengths,
+    const TensorFloat& wk,
+    const TensorFloat& wq,
+    const TensorFloat& wv,
+    const TensorInt& new_batch_idx,
     TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result,
-    int n_new_items, int n_batch);
+    int n_new_items, int n_sequence);
 
 
 void launch_fill_new_k_v_cache_paged_attention(
     TensorFloatPoint page_table, const TensorInt& new_batch_idx, const TensorInt& lengths,
     const TensorFloat& wk, const TensorFloat& wv, int n_new_items, int n_sequence);
+
+void launch_get_latest_k_q_v_paged_attention(
+    TensorFloatPoint& page_table, const TensorInt& lengths,
+    const TensorFloat& wk, const TensorFloat& wq,
+    const TensorFloat& wv, TensorFloat& q_output, int n_sequence);

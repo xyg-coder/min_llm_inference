@@ -83,6 +83,41 @@ __global__ void compare_page_table_transpose(const float** page_table, const flo
     }
 }
 
+/**
+ * Clone the data into the page_table
+ * 
+ * page_table: [n_batch, n_sequence / page_block]
+ * inp_embedding, v_cache: [n_batch, n_sequence, emb_dim]
+ * kt_cache: [n_batch, emb_dim, n_sequence]
+ */
+__global__ void clone_inp_embedding_k_v_cache(
+    float** page_table, const float* inp_embedding, const float* kt_cache, const float* v_cache, const int* lengths, 
+    int n_batch, int n_sequence, int emb_dim, int page_block_size) {
+
+    int i_batch = blockIdx.z;
+    int i_sequence = blockIdx.y * blockDim.y + threadIdx.y;
+    int i_dim = blockIdx.x * blockDim.x + threadIdx.x;
+    int batch_length = lengths[i_batch];
+    __shared__ float kt_cache_shared[TILE_SIZE][TILE_SIZE];
+    if (blockIdx.y * blockDim.y >= batch_length || blockIdx.x * blockDim.x >= emb_dim) {
+        return;
+    }
+
+    if (blockIdx.y * blockDim.y + threadIdx.x < batch_length && blockIdx.x * blockDim.x + threadIdx.y < emb_dim) {
+        kt_cache_shared[threadIdx.y][threadIdx.x] = kt_cache[i_batch * emb_dim * n_sequence +
+            (blockIdx.x * blockDim.x + threadIdx.y) * n_sequence + blockIdx.y * blockDim.y + threadIdx.x];
+    }
+    __syncthreads();
+    if (i_sequence < batch_length && i_dim < emb_dim) {
+        set_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, page_block_size, i_dim, INP_EMB_EMB_OFFSET, 
+            inp_embedding[i_batch * emb_dim * n_sequence + (blockIdx.y * blockDim.y + threadIdx.y) * emb_dim + blockIdx.x * blockDim.x + threadIdx.x]);
+        set_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, page_block_size, i_dim, V_CACHE_EMB_OFFSET, 
+            v_cache[i_batch * emb_dim * n_sequence + (blockIdx.y * blockDim.y + threadIdx.y) * emb_dim + blockIdx.x * blockDim.x + threadIdx.x]);
+        set_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, page_block_size, i_dim, K_CACHE_EMB_OFFSET, 
+            kt_cache_shared[threadIdx.x][threadIdx.y]);
+    }
+}
+
 void assert_float_kernel_close(const float* data1, const float* data2, int size, float threshold) {
     constexpr int blockDim = 256;
     int *d_exception_flag, h_exception_flag = 0;
@@ -136,4 +171,14 @@ void assert_page_table_close(
     if (h_exception_flag) {
         throw std::runtime_error("2 arrays are not close");
     }
+}
+
+void launch_clone_inp_embedding_k_v_cache(
+    float** page_table, const float* inp_embedding, const float* kt_cache,
+    const float* v_cache, const int* lengths, int n_batch, int n_sequence, int emb_dim) {
+
+    dim3 blockDim(TILE_SIZE, TILE_SIZE);
+    dim3 gridDim(ceil_div(emb_dim, TILE_SIZE), ceil_div(n_sequence, TILE_SIZE), n_batch);
+    clone_inp_embedding_k_v_cache<<<gridDim, blockDim>>>(page_table, inp_embedding, kt_cache, v_cache, lengths, n_batch, n_sequence, emb_dim, PAGE_BLOCK_SIZE);
+    CUDA_CHECK_LAST();
 }
