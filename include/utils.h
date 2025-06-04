@@ -27,7 +27,6 @@ __device__ __inline__ float get_page_table_value(
     
     int page_table_width = n_sequence / page_block_size;
     const float* page_pos = page_table[i_batch * page_table_width + i_sequence / page_block_size];
-    printf("Address: %p\n", (void*)page_pos);
     return page_pos[(i_sequence % page_block_size) * emb_dim * 3 + emb_offset * emb_dim + i_dim];
 }
 

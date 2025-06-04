@@ -687,15 +687,15 @@ PagedAttentionTestWrapper::PagedAttentionTestWrapper(
 TensorWrapperForPagedAttention generate_paged_attention_wrapper_device_tensors(size_t n_batch, size_t n_sequence, size_t emb_dim) {
     auto lengths_device_host = get_random_device_host_tensor_int({n_batch}, n_sequence - 1);
     assert(n_sequence % PAGE_BLOCK_SIZE == 0);
-    int total_length = 0;
+    int total_blocks = 0;
     int* length_data = lengths_device_host.second.data();
     for (int i = 0; i < n_batch; ++i) {
-        total_length += ceil_div(length_data[i] + 1, PAGE_BLOCK_SIZE) * PAGE_BLOCK_SIZE;
+        total_blocks += ceil_div(length_data[i] + 1, PAGE_BLOCK_SIZE);
     }
-    TensorFloat page_table_memory({total_length * 3 * emb_dim}, DeviceType::DEVICE);
+    TensorFloat page_table_memory({total_blocks * PAGE_BLOCK_SIZE * 3 * emb_dim}, DeviceType::DEVICE);
     float* page_table_mem_data = page_table_memory.data();
     std::vector<float*> all_blocks;
-    for (int i = 0; i < total_length; ++i) {
+    for (int i = 0; i < total_blocks; ++i) {
         all_blocks.push_back(page_table_mem_data + i * PAGE_BLOCK_SIZE * 3 * emb_dim);
     }
     std::random_device rd;

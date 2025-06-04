@@ -48,8 +48,6 @@ __global__ void compare_page_table(const float** page_table, const float* to_com
     if (i_sequence >= batch_length || i_dim >= emb_dim) {
         return;
     }
-    printf("%d, %d, %d, %f\n", i_batch, i_sequence, i_dim,
-        get_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, page_block_size, i_dim, emb_offset));
     if (fabsf(to_compare_with[i_batch * n_sequence * emb_dim + i_sequence * emb_dim + i_dim] -
         get_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, page_block_size, i_dim, emb_offset)) > threshold) {
 
@@ -74,7 +72,8 @@ __global__ void compare_page_table_transpose(const float** page_table, const flo
     int to_compare_with_i_sequence = blockIdx.y * blockDim.y + threadIdx.x;
     int to_compare_with_i_emb_dim = blockIdx.x * blockDim.x + threadIdx.y;
     if (to_compare_with_i_sequence < batch_length && to_compare_with_i_emb_dim < emb_dim) {
-        compare_with_shared[threadIdx.y][threadIdx.x] = to_compare_with[i_batch * n_sequence * emb_dim + to_compare_with_i_emb_dim * n_sequence + to_compare_with_i_sequence];
+        compare_with_shared[threadIdx.y][threadIdx.x] = to_compare_with[
+            i_batch * n_sequence * emb_dim + to_compare_with_i_emb_dim * n_sequence + to_compare_with_i_sequence];
     }
     __syncthreads();
     if (i_sequence < batch_length && i_dim < emb_dim) {
