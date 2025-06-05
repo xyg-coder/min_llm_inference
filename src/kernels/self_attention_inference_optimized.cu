@@ -379,4 +379,5 @@ void launch_softmax_v(
     softmax_v<<<gridDim, TILE_SIZE_SQUARE>>>(
         softmax_result.data(), v_cache.data(), attention_result.data(),
         lengths.data(), n_batch, n_sequence, output_dim);
+    CUDA_CHECK_LAST();
 }

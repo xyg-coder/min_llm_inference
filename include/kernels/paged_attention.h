@@ -32,3 +32,11 @@ void launch_get_latest_k_q_v_paged_attention(
     TensorFloatPoint& page_table, const TensorInt& lengths,
     const TensorFloat& wk, const TensorFloat& wq,
     const TensorFloat& wv, TensorFloat& q_output, int n_sequence);
+
+void launch_qkt_paged_attention(
+    const TensorFloat& q_output, const TensorFloatPoint& page_table, const TensorInt& lengths,
+    TensorFloat& qkt_output);
+
+void launch_softmax_v_paged_attention(
+    const TensorFloat& softmax_result, const TensorFloatPoint& page_table, TensorFloat& attention_result,
+    const TensorInt& lengths);

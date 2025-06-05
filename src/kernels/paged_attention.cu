@@ -1,6 +1,7 @@
 #include "constants.h"
 #include "tensor.hpp"
 #include "utils.h"
+#include "kernels/self_attention_inference_optimized.h"
 #include <cassert>
 
 
@@ -177,7 +178,7 @@ void launch_get_latest_k_q_v_paged_attention(
 }
 
 /**
- * q: [n_batch, dim]
+ * q: [n_batch, emb_dim]
  * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
  * qkt: [n_batch, n_sequence]
  * 
@@ -211,10 +212,10 @@ __global__ void qkt_paged_attention(
         
         for (int i_sequence = blockIdx.x * TILE_SIZE; i_sequence < blockIdx.x * TILE_SIZE + TILE_SIZE && i_sequence < cur_batch_length; i_sequence++) {
             if (i + threadIdx.x < emb_dim) {
-                k_shared[i_sequence][threadIdx.x] = get_page_table_value(
+                k_shared[i_sequence - blockIdx.x * TILE_SIZE][threadIdx.x] = get_page_table_value(
                     page_table, batch_i, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x, K_CACHE_EMB_OFFSET);
             } else {
-                k_shared[i_sequence][threadIdx.x] = 0.0f;
+                k_shared[i_sequence - blockIdx.x * TILE_SIZE][threadIdx.x] = 0.0f;
             }
         }
         __syncthreads();
@@ -230,13 +231,30 @@ __global__ void qkt_paged_attention(
 }
 
 /**
+ * q_output: [n_batch, dim]
+ * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
+ * qkt: [n_batch, n_sequence]
+ */
+void launch_qkt_paged_attention(
+    const TensorFloat& q_output, const TensorFloatPoint& page_table, const TensorInt& lengths,
+    TensorFloat& qkt_output) {
+    
+    int n_batch = q_output.shape()[0];
+    int n_sequence = qkt_output.shape()[1];
+    int emb_dim = q_output.shape()[1];
+    dim3 gridDim(ceil_div(n_sequence, TILE_SIZE), n_batch);
+    qkt_paged_attention<<<gridDim, TILE_SIZE>>>(q_output.data(), (const float**)page_table.data(), lengths.data(), qkt_output.data(), n_batch, n_sequence, emb_dim);
+    CUDA_CHECK_LAST();
+}
+
+/**
  * softmax_result: [n_batch, n_sequence] 
  * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
- * softmax_v_result: [n_batch, emb_dim]
+ * attention_result: [n_batch, emb_dim]
  */
 __global__ void softmax_v_paged_attention(
     const float* softmax_result, const float** page_table,
-    float* softmax_v_result,
+    float* attention_result,
     const int* lengths,
     int n_batch, int n_sequence, int emb_dim) {
 
@@ -261,8 +279,27 @@ __global__ void softmax_v_paged_attention(
         __syncthreads();
     }
     if (write_col < emb_dim) {
-        softmax_v_result[i_batch * emb_dim + write_col] = result;
+        attention_result[i_batch * emb_dim + write_col] = result;
     }
+}
+
+/**
+ * softmax_result: [n_batch, n_sequence] 
+ * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
+ * attention_result: [n_batch, emb_dim]
+ */
+void launch_softmax_v_paged_attention(
+    const TensorFloat& softmax_result, const TensorFloatPoint& page_table, TensorFloat& attention_result,
+    const TensorInt& lengths) {
+    
+    int n_batch = softmax_result.shape()[0];
+    int n_sequence = softmax_result.shape()[1];
+    int emb_dim = attention_result.shape()[1];
+    dim3 gridDim(ceil_div(emb_dim, TILE_SIZE_SQUARE), n_batch);
+    softmax_v_paged_attention<<<gridDim, TILE_SIZE_SQUARE>>>(
+        softmax_result.data(), (const float**)page_table.data(),
+        attention_result.data(), lengths.data(), n_batch, n_sequence, emb_dim);
+    CUDA_CHECK_LAST();
 }
 
 /**
@@ -289,4 +326,10 @@ void paged_attention(
     launch_fill_new_k_v_cache_paged_attention(page_table, new_batch_idx, lengths, wk, wv, n_new_items, n_sequence);
 
     launch_get_latest_k_q_v_paged_attention(page_table, lengths, wk, wq, wv, q_output, n_sequence);
+
+    launch_qkt_paged_attention(q_output, page_table, lengths, qkt_output);
+
+    launch_softmax_in_place_with_lengths(qkt_output, lengths);
+
+    launch_softmax_v_paged_attention(qkt_output, page_table, attention_result, lengths);
 }
