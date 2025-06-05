@@ -31,6 +31,7 @@ public:
     TensorData(const TensorData&) = delete;
     TensorData& operator=(const TensorData&) = delete;
     virtual void copy_from(const TensorData&) = 0;
+    DeviceType device() const { return device_; }
     virtual T* data() = 0;
     virtual const T* data() const = 0;
     virtual ~TensorData();
@@ -210,15 +211,19 @@ void AsyncTensorData<T>::copy_from(const TensorData<T>& other) {
         throw std::runtime_error("Copy from: source is not an AsyncTensorData");
     }
     const AsyncTensorData<T>& async_other = *async_other_ptr;
-    if (async_other.size_ != this->size_ || async_other.device_ == this->device_) {
-        throw std::runtime_error("Copy from: shape or device mismatch, and we only support copy from different devices");
+    if (async_other.size_ != this->size_) {
+        throw std::runtime_error("Copy from: shape or device mismatch");
     }
 
     // copy from DEVICE to HOST
-    if (this->device_ == DeviceType::HOST) {
+    if (this->device_ == DeviceType::HOST && other.device() == DeviceType::DEVICE) {
         cudaMemcpyAsync(data(), async_other.data(), this->size_ * sizeof(T), cudaMemcpyDeviceToHost, tensor_creation_free_cuda_stream());
-    } else {    // copy from HOST to DEVICE
+    } else if (this->device_ == DeviceType::DEVICE && other.device() == DeviceType::HOST) {
         cudaMemcpyAsync(data(), async_other.data(), this->size_ * sizeof(T), cudaMemcpyHostToDevice, tensor_creation_free_cuda_stream());
+    } else if (this->device_ == DeviceType::DEVICE && other.device() == DeviceType::DEVICE) {
+        cudaMemcpyAsync(data(), async_other.data(), this->size_ * sizeof(T), cudaMemcpyDeviceToDevice, tensor_creation_free_cuda_stream());
+    } else {
+        cudaMemcpyAsync(data(), async_other.data(), this->size_ * sizeof(T), cudaMemcpyHostToHost, tensor_creation_free_cuda_stream());
     }
     is_ready = false;
     CUDA_CHECK_LAST();
@@ -282,13 +287,17 @@ void SyncTensorData<T>::copy_from(const TensorData<T>& other) {
     }
     const SyncTensorData<T>& sync_other = *sync_other_ptr;
 
-    if (sync_other.size_ != this->size_ || sync_other.device_ == this->device_)
-        throw std::runtime_error("Copy from: shape or device mismatch, and we only support copy from different devices");
+    if (sync_other.size_ != this->size_)
+        throw std::runtime_error("Copy from: shape or device mismatch");
 
-    if (this->device_ == DeviceType::HOST) {
+    if (this->device_ == DeviceType::HOST && other.device() == DeviceType::DEVICE) {
         cudaMemcpy(data(), other.data(), this->size_ * sizeof(T), cudaMemcpyDeviceToHost);
-    } else {
+    } else if (this->device_ == DeviceType::DEVICE && other.device() == DeviceType::HOST) {
         cudaMemcpy(data(), other.data(), this->size_ * sizeof(T), cudaMemcpyHostToDevice);
+    } else if (this->device_ == DeviceType::DEVICE && other.device() == DeviceType::DEVICE) {
+        cudaMemcpy(data(), other.data(), this->size_ * sizeof(T), cudaMemcpyDeviceToDevice);
+    } else {
+        cudaMemcpy(data(), other.data(), this->size_ * sizeof(T), cudaMemcpyHostToHost);
     }
     CUDA_CHECK_LAST();
 }

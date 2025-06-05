@@ -1,9 +1,13 @@
 cmake_minimum_required(VERSION 3.18)
 project(min_llm_inference LANGUAGES CXX CUDA)
 
-# uncomment when debugging
-# set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
-# set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -g -G")
+option(DEBUG_MODE "If ON, turn on debug mode" OFF)
+if(DEBUG_MODE)
+    message("DEBUG_MODE is ON")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
+    set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -g -G")
+    add_definitions(-DUSE_SYNC_CUDA_CHECK=1)
+endif()
 
 # Set the C++ standard
 set(CMAKE_CXX_STANDARD 17)
