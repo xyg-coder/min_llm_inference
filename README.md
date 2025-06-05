@@ -49,5 +49,6 @@ make # build and run tests
 
 ## Plan
 
+* Under the same gpu memory, compare between old way and paged attention.
 * Learn the way to profile and benchmark.
 * How to use multi-gpus to accelerate
