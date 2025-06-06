@@ -17,3 +17,9 @@ void launch_inference_optimized_encoder_kernel(
     const float* emb_table, const float* wpe, const int* inp, float* inp_embedding, const int* lengths,
     const int* new_item_indices,
     int batch_size, int n_sequence, int embedding_dim, int n_new_items);
+
+
+void launch_paged_attention_encoder_kernel(
+    const float* emb_table, const float* wpe, const int* inp, float** page_table, const int* lengths,
+    const int* new_item_indices,
+    int batch_size, int n_sequence, int embedding_dim, int n_new_items);

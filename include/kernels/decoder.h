@@ -20,3 +20,9 @@ void launch_decoder(
     TensorFloat& emb_score,
     const TensorFloat& wpe_table,
     TensorFloat& inp_embedding, TensorInt& lengths, TensorInt& decoder_result);
+
+void launch_paged_attention_decoder(
+    const TensorFloat& batch_result, const TensorFloat& emb_table,
+    TensorFloat& emb_score,
+    const TensorFloat& wpe_table,
+    TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result);
