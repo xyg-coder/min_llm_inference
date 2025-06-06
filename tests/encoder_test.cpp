@@ -1,5 +1,7 @@
+#include "constants.h"
 #include "include/test_utils.h"
 #include "kernels/encoder.h"
+#include "kernels/utils.cuh"
 #include "tensor.hpp"
 #include "test_utils.h"
 #include <algorithm>
@@ -68,4 +70,40 @@ TEST(EncoderTest, EncoderInferenceOptimizedTest) {
         n_batch, n_sequence, embedding_dim, n_new_items);
     
     assert_near(output_device_host.first, output_device_host.second);
+}
+
+TEST(EncoderTest, PagedAttentionEncoderTest) {
+    size_t n_vocab = get_random_number(1024, 3096);
+    size_t emb_dim = get_random_number(128, 128 * 3) / 4 * 4;
+    size_t n_sequence = get_random_number(1024, 3096) / PAGE_BLOCK_SIZE * PAGE_BLOCK_SIZE;
+    size_t n_batch = get_random_number(128, 128 * 3);
+    auto emb_table_device = get_random_device_tensor({n_vocab, emb_dim});
+    auto wpe_table_device = get_random_device_tensor({n_sequence, emb_dim});
+    auto inp_device = get_random_device_tensor_int({n_batch, n_sequence}, n_vocab - 1);
+
+    TensorWrapperForPagedAttention wrapper = generate_paged_attention_wrapper_device_tensors(
+        n_batch, n_sequence, emb_dim
+    );
+
+    launch_inference_optimized_encoder_kernel(
+        emb_table_device.data(),
+        wpe_table_device.data(),
+        inp_device.data(),
+        wrapper.inp_embedding.data(),
+        wrapper.lengths.data(),
+        wrapper.new_batch_idx.data(),
+        n_batch, n_sequence, emb_dim, wrapper.n_new_batches); 
+
+    launch_paged_attention_encoder_kernel(
+        emb_table_device.data(),
+        wpe_table_device.data(),
+        inp_device.data(),
+        wrapper.page_table.data(),
+        wrapper.lengths.data(),
+        wrapper.new_batch_idx.data(),
+        n_batch, n_sequence, emb_dim, wrapper.n_new_batches);
+
+    assert_page_table_close(
+        (const float**)wrapper.page_table.data(), wrapper.inp_embedding.data(),
+        wrapper.lengths.data(), n_batch, n_sequence, INP_EMB_EMB_OFFSET, emb_dim);
 }

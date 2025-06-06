@@ -26,6 +26,7 @@ public:
 std::pair<TensorFloat, TensorFloat> get_random_device_host_tensor(const std::vector<size_t>& shape, float ratio = 1);
 TensorFloat get_random_device_tensor(const std::vector<size_t>& shape, float ratio = 1);
 TensorFloat get_random_device_tensor(const std::vector<size_t>& shape, int max_val);
+TensorInt get_random_device_tensor_int(const std::vector<size_t> &shape, int max_val);
 
 std::pair<TensorInt, TensorInt> get_random_device_host_tensor_int(const std::vector<size_t>& shape, int max_val);
 
