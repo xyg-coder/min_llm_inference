@@ -684,8 +684,14 @@ PagedAttentionTestWrapper::PagedAttentionTestWrapper(
         item_storage(std::move(item_storage)),
         tokens(std::move(tokens)) { }
 
-TensorWrapperForPagedAttention generate_paged_attention_wrapper_device_tensors(size_t n_batch, size_t n_sequence, size_t emb_dim) {
+TensorWrapperForPagedAttention generate_paged_attention_wrapper_device_tensors(
+    size_t n_batch, size_t n_sequence, size_t emb_dim, std::optional<TensorInt> lengths_override) {
+    
     auto lengths_device_host = get_random_device_host_tensor_int({n_batch}, n_sequence - 1);
+    if (lengths_override) {
+        lengths_device_host.second.copy_from(*lengths_override);
+        lengths_device_host.first.copy_from(*lengths_override);
+    }
     assert(n_sequence % PAGE_BLOCK_SIZE == 0);
     int total_blocks = 0;
     int* length_data = lengths_device_host.second.data();
