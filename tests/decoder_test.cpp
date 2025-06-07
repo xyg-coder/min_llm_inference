@@ -16,7 +16,7 @@ TEST(DecoderTest, DecoderKernelTest) {
     auto emb_score_device_host = get_random_device_host_tensor({n_batch, n_vocab});
     auto wpe_table_device_host = get_random_device_host_tensor({n_sequence, embedding_dim});
     auto inp_table_device_host = get_random_device_host_tensor({n_batch, n_sequence, embedding_dim});
-    auto lengths_device_host = get_random_device_host_tensor_int({n_batch}, n_sequence);
+    auto lengths_device_host = get_random_device_host_tensor_int({n_batch}, n_sequence - 1);
     auto decoder_result_device_host = get_random_device_host_tensor_int({n_batch}, 100);
 
     launch_decoder(
@@ -54,7 +54,7 @@ TEST(DecoderTest, MaxLengthTest) {
     auto emb_score_device_host = get_random_device_host_tensor({n_batch, n_vocab});
     auto wpe_table_device_host = get_random_device_host_tensor({n_sequence, embedding_dim});
     auto inp_table_device_host = get_random_device_host_tensor({n_batch, n_sequence, embedding_dim});
-    auto lengths_device_host = get_random_device_host_tensor_int({n_batch}, n_sequence);
+    auto lengths_device_host = get_random_device_host_tensor_int({n_batch}, n_sequence - 1);
     auto decoder_result_device_host = get_random_device_host_tensor_int({n_batch}, 100);
 
     auto zero_and_max_length_indices = get_unique_num_array(0, n_batch - 1, get_random_number(2, n_batch - 3));
@@ -118,7 +118,7 @@ TEST(DecoderTest, PagedAttentionDecoderKernelTest) {
     auto paged_attention_decoder_result = get_random_device_tensor_int({n_batch}, 100);
     paged_attention_decoder_result.copy_from(decoder_result_to_compare);
 
-    auto lengths_to_compare = get_random_device_tensor_int({n_batch}, n_sequence);
+    auto lengths_to_compare = get_random_device_tensor_int({n_batch}, n_sequence - 1);
     lengths_to_compare.copy_from(wrapper.lengths);
 
     launch_decoder(
@@ -150,13 +150,14 @@ TEST(DecoderTest, PagedAttentionDecoderKernelTest) {
 TEST(DecoderTest, PagedAttentionMaxLengthTest) {
     size_t n_batch = get_random_number(128, 128 * 3);
     size_t emb_dim = get_random_number(128, 128 * 3) / 4 * 4;
-    size_t n_sequence = get_random_number(1024, 3096) / PAGE_BLOCK_SIZE * PAGE_BLOCK_SIZE;
+    // size_t n_sequence = get_random_number(1024, 3096) / PAGE_BLOCK_SIZE * PAGE_BLOCK_SIZE;
+    size_t n_sequence = PAGE_BLOCK_SIZE;
     size_t n_vocab = get_random_number(1024, 3096);
 
     auto emb_table_device = get_random_device_tensor({n_vocab, emb_dim});
     auto wpe_table_device = get_random_device_tensor({n_sequence, emb_dim});
 
-    auto lengths_to_compare_device_host = get_random_device_host_tensor_int({n_batch}, n_sequence);
+    auto lengths_to_compare_device_host = get_random_device_host_tensor_int({n_batch}, n_sequence - 1);
 
     auto zero_and_max_length_indices = get_unique_num_array(0, n_batch - 1, get_random_number(2, n_batch - 3));
     int num_max_length = get_random_number(1, zero_and_max_length_indices.size() - 1);

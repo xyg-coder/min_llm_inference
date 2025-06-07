@@ -696,7 +696,8 @@ TensorWrapperForPagedAttention generate_paged_attention_wrapper_device_tensors(
     int total_blocks = 0;
     int* length_data = lengths_device_host.second.data();
     for (int i = 0; i < n_batch; ++i) {
-        total_blocks += ceil_div(length_data[i] + 1, PAGE_BLOCK_SIZE);
+        assert(length_data[i] <= n_sequence);
+        total_blocks += ceil_div(std::min(length_data[i] + 1, (int)n_sequence), PAGE_BLOCK_SIZE);
     }
     TensorFloat page_table_memory({total_blocks * PAGE_BLOCK_SIZE * 3 * emb_dim}, DeviceType::DEVICE);
     float* page_table_mem_data = page_table_memory.data();
@@ -718,7 +719,7 @@ TensorWrapperForPagedAttention generate_paged_attention_wrapper_device_tensors(
         if (length_data[i] == 0) {
             continue;
         }
-        for (int j = 0; j < ceil_div(length_data[i] + 1, PAGE_BLOCK_SIZE); ++j) {
+        for (int j = 0; j < ceil_div(std::min(length_data[i] + 1, (int)n_sequence), PAGE_BLOCK_SIZE) && j < width; ++j) {
             page_table_host_data[i * width + j] = *cur_block_i;
             cur_block_i++;
         }
