@@ -39,15 +39,6 @@ __device__ __inline__ void set_page_table_value(
     page_pos[(i_sequence % page_block_size) * emb_dim * 3 + emb_dim * emb_offset + i_dim] = value;
 }
 
-__device__ __inline__ void set_page_table_value_float4(
-    float** page_table, int i_batch, int n_sequence, int i_sequence, int emb_dim_4, int page_block_size, int i_dim_4, int emb_offset,
-    float4 value) {
-    
-    int page_table_width = n_sequence / page_block_size;
-    float4* page_pos = reinterpret_cast<float4*>(page_table[i_batch * page_table_width + i_sequence / page_block_size]);
-    page_pos[(i_sequence % page_block_size) * emb_dim_4 * 3 + emb_dim_4 * emb_offset + i_dim_4] = value;
-}
-
 void cuda_check(cudaError_t error, const char *file, int line);
 
 inline int ceil_div(int a, int b) {

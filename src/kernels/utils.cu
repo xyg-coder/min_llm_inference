@@ -96,7 +96,7 @@ __global__ void clone_inp_embedding_k_v_cache(
 
     int i_batch = blockIdx.z;
     int i_sequence = blockIdx.y * blockDim.y + threadIdx.y;
-    int i_dim_4 = blockIdx.x * blockDim.x + threadIdx.x;
+    int i_dim = blockIdx.x * blockDim.x + threadIdx.x;
     int batch_length = lengths[i_batch];
     // never allocated
     if (batch_length == 0) {
@@ -105,27 +105,22 @@ __global__ void clone_inp_embedding_k_v_cache(
     // For decoder, it will generate inp_embedding for the next position.
     // So here we clone one more
     int max_to_clone_index = min(batch_length, n_sequence - 1);
-    __shared__ float4 kt_cache_shared[TILE_SIZE][TILE_SIZE];
-    assert(emb_dim % 4 == 0);
-    int emb_dim_4 = emb_dim / 4;
-    if (blockIdx.y * blockDim.y > max_to_clone_index || blockIdx.x * blockDim.x >= emb_dim_4) {
+    __shared__ float kt_cache_shared[TILE_SIZE][TILE_SIZE];
+
+    if (blockIdx.y * blockDim.y > max_to_clone_index || blockIdx.x * blockDim.x >= emb_dim) {
         return;
     }
-    const float4* kt_cache_4 = reinterpret_cast<const float4*>(kt_cache);
-    const float4* inp_embedding_4 = reinterpret_cast<const float4*>(inp_embedding);
-    const float4* v_cache_4 = reinterpret_cast<const float4*>(v_cache);
-
-    if (blockIdx.y * blockDim.y + threadIdx.x <= max_to_clone_index && blockIdx.x * blockDim.x + threadIdx.y < emb_dim_4) {
-        kt_cache_shared[threadIdx.y][threadIdx.x] = kt_cache_4[i_batch * emb_dim_4 * n_sequence +
+    if (blockIdx.y * blockDim.y + threadIdx.x <= max_to_clone_index && blockIdx.x * blockDim.x + threadIdx.y < emb_dim) {
+        kt_cache_shared[threadIdx.y][threadIdx.x] = kt_cache[i_batch * emb_dim * n_sequence +
             (blockIdx.x * blockDim.x + threadIdx.y) * n_sequence + blockIdx.y * blockDim.y + threadIdx.x];
     }
     __syncthreads();
-    if (i_sequence <= max_to_clone_index && i_dim_4 < emb_dim_4) {
-        set_page_table_value_float4(page_table, i_batch, n_sequence, i_sequence, emb_dim_4, page_block_size, i_dim_4, INP_EMB_EMB_OFFSET, 
-            inp_embedding_4[i_batch * emb_dim_4 * n_sequence + i_sequence * emb_dim_4 + i_dim_4]);
-        set_page_table_value_float4(page_table, i_batch, n_sequence, i_sequence, emb_dim_4, page_block_size, i_dim_4, V_CACHE_EMB_OFFSET, 
-            v_cache_4[i_batch * emb_dim_4 * n_sequence + i_sequence * emb_dim_4 + i_dim_4]);
-        set_page_table_value_float4(page_table, i_batch, n_sequence, i_sequence, emb_dim_4, page_block_size, i_dim_4, K_CACHE_EMB_OFFSET, 
+    if (i_sequence <= max_to_clone_index && i_dim < emb_dim) {
+        set_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, page_block_size, i_dim, INP_EMB_EMB_OFFSET, 
+            inp_embedding[i_batch * emb_dim * n_sequence + (blockIdx.y * blockDim.y + threadIdx.y) * emb_dim + blockIdx.x * blockDim.x + threadIdx.x]);
+        set_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, page_block_size, i_dim, V_CACHE_EMB_OFFSET, 
+            v_cache[i_batch * emb_dim * n_sequence + (blockIdx.y * blockDim.y + threadIdx.y) * emb_dim + blockIdx.x * blockDim.x + threadIdx.x]);
+        set_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, page_block_size, i_dim, K_CACHE_EMB_OFFSET, 
             kt_cache_shared[threadIdx.x][threadIdx.y]);
     }
 }
@@ -171,7 +166,6 @@ void assert_page_table_close(
         dim3 blockDim(TILE_SIZE, TILE_SIZE);
         compare_page_table_transpose<<<gridDim, blockDim>>>(page_table, to_compare_with, lengths, n_batch, n_sequence, PAGE_BLOCK_SIZE,
             emb_offset, emb_dim, threshold, d_exception_flag);
-
     } else {
         dim3 gridDim(ceil_div(emb_dim, TILE_SIZE_SQUARE), n_sequence, n_batch);
         compare_page_table<<<gridDim, TILE_SIZE_SQUARE>>>(

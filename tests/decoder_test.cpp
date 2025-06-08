@@ -150,8 +150,7 @@ TEST(DecoderTest, PagedAttentionDecoderKernelTest) {
 TEST(DecoderTest, PagedAttentionMaxLengthTest) {
     size_t n_batch = get_random_number(128, 128 * 3);
     size_t emb_dim = get_random_number(128, 128 * 3) / 4 * 4;
-    // size_t n_sequence = get_random_number(1024, 3096) / PAGE_BLOCK_SIZE * PAGE_BLOCK_SIZE;
-    size_t n_sequence = PAGE_BLOCK_SIZE;
+    size_t n_sequence = get_random_number(1024, 3096) / PAGE_BLOCK_SIZE * PAGE_BLOCK_SIZE;
     size_t n_vocab = get_random_number(1024, 3096);
 
     auto emb_table_device = get_random_device_tensor({n_vocab, emb_dim});
