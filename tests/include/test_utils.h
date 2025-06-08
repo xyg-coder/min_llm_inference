@@ -4,6 +4,7 @@
 #include "items_storage.h"
 #include "paged_item_storage.h"
 #include "tensor.hpp"
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -26,6 +27,7 @@ public:
 std::pair<TensorFloat, TensorFloat> get_random_device_host_tensor(const std::vector<size_t>& shape, float ratio = 1);
 TensorFloat get_random_device_tensor(const std::vector<size_t>& shape, float ratio = 1);
 TensorFloat get_random_device_tensor(const std::vector<size_t>& shape, int max_val);
+TensorInt get_random_device_tensor_int(const std::vector<size_t> &shape, int max_val);
 
 std::pair<TensorInt, TensorInt> get_random_device_host_tensor_int(const std::vector<size_t>& shape, int max_val);
 
@@ -105,4 +107,4 @@ public:
     int n_new_batches; 
 };
 
-TensorWrapperForPagedAttention generate_paged_attention_wrapper_device_tensors(size_t n_batch=1024, size_t n_sequence=1024, size_t emb_dim=32);
+TensorWrapperForPagedAttention generate_paged_attention_wrapper_device_tensors(size_t n_batch=1024, size_t n_sequence=1024, size_t emb_dim=32, std::optional<TensorInt> lengths_override=std::nullopt);

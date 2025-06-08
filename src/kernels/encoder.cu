@@ -90,3 +90,54 @@ void launch_inference_optimized_encoder_kernel(
     inference_optimized_encoder<<<gridDim, BLOCK_DIM>>>(emb_table, wpe, inp, inp_embedding, lengths, new_item_indices, batch_size, n_sequence, embedding_dim, n_new_items);
     CUDA_CHECK_LAST();
 }
+
+/**
+ * emb_table: [n_vocab, embedding_dim]
+ * wpe: [n_sequence, embedding_dim]
+ * inp: [n_batch, n_sequence]
+ * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
+ * lengths: [n_batch]
+ * new_item_indices: [n_new_items]
+ */
+__global__ void paged_attention_encoder(
+    const float* emb_table, const float* wpe, const int* inp, float** page_table, const int* lengths,
+    const int* new_item_indices,
+    int batch_size, int n_sequence, int embedding_dim, int n_new_items, int page_block_size) {
+
+    assert(embedding_dim % 4 == 0);
+    assert(n_sequence % page_block_size == 0);
+    int i_batch = new_item_indices[blockIdx.z];
+    int batch_len = lengths[i_batch];
+    int i_sequence = blockIdx.y;
+    if (i_sequence >= batch_len) {
+        return;
+    }
+    int token_id = inp[i_batch * n_sequence + i_sequence];
+    int i_dim = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i_dim >= embedding_dim / 4) {
+        return;
+    }
+
+    const float4* emb_table_start = reinterpret_cast<const float4*>(emb_table + token_id * embedding_dim);
+    const float4* wpe_table_start = reinterpret_cast<const float4*>(wpe + i_sequence * embedding_dim);
+    int width = n_sequence / page_block_size;
+    float* page_pos = page_table[i_batch * width + i_sequence / page_block_size];
+    float* emb_pos = page_pos + (i_sequence % page_block_size) * embedding_dim * 3 + embedding_dim * INP_EMB_EMB_OFFSET;
+    float4* output_4 = reinterpret_cast<float4*>(emb_pos);
+    output_4[i_dim] = float4_add(emb_table_start[i_dim], wpe_table_start[i_dim]);
+}
+
+void launch_paged_attention_encoder_kernel(
+    const float* emb_table, const float* wpe, const int* inp, float** page_table, const int* lengths,
+    const int* new_item_indices,
+    int batch_size, int n_sequence, int embedding_dim, int n_new_items) {
+    if (n_new_items == 0) {
+        return;
+    }
+
+    assert(embedding_dim % 4 == 0);
+    dim3 gridDim(ceil_div(embedding_dim / 4, BLOCK_DIM), n_sequence, n_new_items);
+    paged_attention_encoder<<<gridDim, BLOCK_DIM>>>(
+        emb_table, wpe, inp, page_table, lengths, new_item_indices, batch_size, n_sequence, embedding_dim, n_new_items, PAGE_BLOCK_SIZE);
+    CUDA_CHECK_LAST();
+}

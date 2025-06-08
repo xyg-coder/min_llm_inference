@@ -98,17 +98,24 @@ __global__ void clone_inp_embedding_k_v_cache(
     int i_sequence = blockIdx.y * blockDim.y + threadIdx.y;
     int i_dim = blockIdx.x * blockDim.x + threadIdx.x;
     int batch_length = lengths[i_batch];
-    __shared__ float kt_cache_shared[TILE_SIZE][TILE_SIZE];
-    if (blockIdx.y * blockDim.y >= batch_length || blockIdx.x * blockDim.x >= emb_dim) {
+    // never allocated
+    if (batch_length == 0) {
         return;
     }
+    // For decoder, it will generate inp_embedding for the next position.
+    // So here we clone one more
+    int max_to_clone_index = min(batch_length, n_sequence - 1);
+    __shared__ float kt_cache_shared[TILE_SIZE][TILE_SIZE];
 
-    if (blockIdx.y * blockDim.y + threadIdx.x < batch_length && blockIdx.x * blockDim.x + threadIdx.y < emb_dim) {
+    if (blockIdx.y * blockDim.y > max_to_clone_index || blockIdx.x * blockDim.x >= emb_dim) {
+        return;
+    }
+    if (blockIdx.y * blockDim.y + threadIdx.x <= max_to_clone_index && blockIdx.x * blockDim.x + threadIdx.y < emb_dim) {
         kt_cache_shared[threadIdx.y][threadIdx.x] = kt_cache[i_batch * emb_dim * n_sequence +
             (blockIdx.x * blockDim.x + threadIdx.y) * n_sequence + blockIdx.y * blockDim.y + threadIdx.x];
     }
     __syncthreads();
-    if (i_sequence < batch_length && i_dim < emb_dim) {
+    if (i_sequence <= max_to_clone_index && i_dim < emb_dim) {
         set_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, page_block_size, i_dim, INP_EMB_EMB_OFFSET, 
             inp_embedding[i_batch * emb_dim * n_sequence + (blockIdx.y * blockDim.y + threadIdx.y) * emb_dim + blockIdx.x * blockDim.x + threadIdx.x]);
         set_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, page_block_size, i_dim, V_CACHE_EMB_OFFSET, 
@@ -159,7 +166,6 @@ void assert_page_table_close(
         dim3 blockDim(TILE_SIZE, TILE_SIZE);
         compare_page_table_transpose<<<gridDim, blockDim>>>(page_table, to_compare_with, lengths, n_batch, n_sequence, PAGE_BLOCK_SIZE,
             emb_offset, emb_dim, threshold, d_exception_flag);
-
     } else {
         dim3 gridDim(ceil_div(emb_dim, TILE_SIZE_SQUARE), n_sequence, n_batch);
         compare_page_table<<<gridDim, TILE_SIZE_SQUARE>>>(
