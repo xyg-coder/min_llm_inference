@@ -111,19 +111,23 @@ __global__ void clone_inp_embedding_k_v_cache(
     static_assert(TILE_SIZE % 4 == 0, "TILE_SIZE should be multiple of 4");
     __shared__ float4 kt_cache_shared[TILE_SIZE_SQUARE];
 
-    if (blockIdx.y * blockDim.y > max_to_clone_index || blockIdx.x * blockDim.x >= emb_dim_4) {
+    if (blockIdx.y * blockDim.y > max_to_clone_index || blockIdx.x * blockDim.x * 4 >= emb_dim) {
         return;
     }
-    const float4* kt_cache_4 = reinterpret_cast<const float4*>(kt_cache);
     const float4* inp_embedding_4 = reinterpret_cast<const float4*>(inp_embedding);
     const float4* v_cache_4 = reinterpret_cast<const float4*>(v_cache);
 
     int v_id = threadIdx.y * TILE_SIZE + threadIdx.x;
     int v_y = v_id / (TILE_SIZE / 4);
     int v_x = v_id % (TILE_SIZE / 4);
-    if (blockIdx.y * blockDim.y / 4 + v_x < n_sequence_4 && blockIdx.x * blockDim.x * 4 + v_y < emb_dim) {
-        kt_cache_shared[v_id] = kt_cache_4[i_batch * emb_dim * n_sequence_4 +
-            (blockIdx.x * blockDim.x * 4 + v_y) * n_sequence_4 + blockIdx.y * blockDim.y / 4 + v_x];
+
+    // where do we start for float
+    int i_sequence_read_start = blockIdx.y * blockDim.y + v_x * 4;
+    int i_dim_read_start = blockIdx.x * blockDim.x * 4 + v_y;
+
+    if (i_sequence_read_start <= max_to_clone_index && i_dim_read_start < emb_dim) {
+        const float4* kt_cache_4 = reinterpret_cast<const float4*>(kt_cache + i_batch * emb_dim * n_sequence + i_dim_read_start * n_sequence + i_sequence_read_start);
+        kt_cache_shared[v_id] = *kt_cache_4;
     }
     __syncthreads();
     const float* kt_cache_shared_float_p = reinterpret_cast<const float*>(kt_cache_shared);
@@ -134,10 +138,10 @@ __global__ void clone_inp_embedding_k_v_cache(
             v_cache_4[i_batch * emb_dim_4 * n_sequence + i_sequence * emb_dim_4 + i_dim]);
         set_page_table_value_float4(page_table, i_batch, n_sequence, i_sequence, emb_dim_4, page_block_size, i_dim, K_CACHE_EMB_OFFSET, 
             float4{
-                kt_cache_shared_float_p[threadIdx.x * TILE_SIZE + threadIdx.y],
-                kt_cache_shared_float_p[(threadIdx.x + 1) * TILE_SIZE + threadIdx.y],
-                kt_cache_shared_float_p[(threadIdx.x + 2) * TILE_SIZE + threadIdx.y],
-                kt_cache_shared_float_p[(threadIdx.x + 3) * TILE_SIZE + threadIdx.y]});
+                kt_cache_shared_float_p[threadIdx.x * 4 * TILE_SIZE + threadIdx.y],
+                kt_cache_shared_float_p[(threadIdx.x * 4 + 1) * TILE_SIZE + threadIdx.y],
+                kt_cache_shared_float_p[(threadIdx.x * 4 + 2) * TILE_SIZE + threadIdx.y],
+                kt_cache_shared_float_p[(threadIdx.x * 4 + 3) * TILE_SIZE + threadIdx.y]});
     }
 }
 
