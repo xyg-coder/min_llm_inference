@@ -97,6 +97,9 @@ __global__ void clone_inp_embedding_k_v_cache(
     int i_batch = blockIdx.z;
     int i_sequence = blockIdx.y * blockDim.y + threadIdx.y;
     int i_dim = blockIdx.x * blockDim.x + threadIdx.x;
+    assert(emb_dim % 4 == 0 && n_sequence % 4 == 0);
+    int emb_dim_4 = emb_dim / 4;
+    int n_sequence_4 = n_sequence / 4;
     int batch_length = lengths[i_batch];
     // never allocated
     if (batch_length == 0) {
@@ -105,23 +108,40 @@ __global__ void clone_inp_embedding_k_v_cache(
     // For decoder, it will generate inp_embedding for the next position.
     // So here we clone one more
     int max_to_clone_index = min(batch_length, n_sequence - 1);
-    __shared__ float kt_cache_shared[TILE_SIZE][TILE_SIZE];
+    static_assert(TILE_SIZE % 4 == 0, "TILE_SIZE should be multiple of 4");
+    __shared__ float4 kt_cache_shared[TILE_SIZE_SQUARE];
 
-    if (blockIdx.y * blockDim.y > max_to_clone_index || blockIdx.x * blockDim.x >= emb_dim) {
+    if (blockIdx.y * blockDim.y > max_to_clone_index || blockIdx.x * blockDim.x * 4 >= emb_dim) {
         return;
     }
-    if (blockIdx.y * blockDim.y + threadIdx.x <= max_to_clone_index && blockIdx.x * blockDim.x + threadIdx.y < emb_dim) {
-        kt_cache_shared[threadIdx.y][threadIdx.x] = kt_cache[i_batch * emb_dim * n_sequence +
-            (blockIdx.x * blockDim.x + threadIdx.y) * n_sequence + blockIdx.y * blockDim.y + threadIdx.x];
+    const float4* inp_embedding_4 = reinterpret_cast<const float4*>(inp_embedding);
+    const float4* v_cache_4 = reinterpret_cast<const float4*>(v_cache);
+
+    int v_id = threadIdx.y * TILE_SIZE + threadIdx.x;
+    int v_y = v_id / (TILE_SIZE / 4);
+    int v_x = v_id % (TILE_SIZE / 4);
+
+    // where do we start for float
+    int i_sequence_read_start = blockIdx.y * blockDim.y + v_x * 4;
+    int i_dim_read_start = blockIdx.x * blockDim.x * 4 + v_y;
+
+    if (i_sequence_read_start <= max_to_clone_index && i_dim_read_start < emb_dim) {
+        const float4* kt_cache_4 = reinterpret_cast<const float4*>(kt_cache + i_batch * emb_dim * n_sequence + i_dim_read_start * n_sequence + i_sequence_read_start);
+        kt_cache_shared[v_id] = *kt_cache_4;
     }
     __syncthreads();
-    if (i_sequence <= max_to_clone_index && i_dim < emb_dim) {
-        set_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, page_block_size, i_dim, INP_EMB_EMB_OFFSET, 
-            inp_embedding[i_batch * emb_dim * n_sequence + (blockIdx.y * blockDim.y + threadIdx.y) * emb_dim + blockIdx.x * blockDim.x + threadIdx.x]);
-        set_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, page_block_size, i_dim, V_CACHE_EMB_OFFSET, 
-            v_cache[i_batch * emb_dim * n_sequence + (blockIdx.y * blockDim.y + threadIdx.y) * emb_dim + blockIdx.x * blockDim.x + threadIdx.x]);
-        set_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, page_block_size, i_dim, K_CACHE_EMB_OFFSET, 
-            kt_cache_shared[threadIdx.x][threadIdx.y]);
+    const float* kt_cache_shared_float_p = reinterpret_cast<const float*>(kt_cache_shared);
+    if (i_sequence <= max_to_clone_index && i_dim < emb_dim_4) {
+        set_page_table_value_float4(page_table, i_batch, n_sequence, i_sequence, emb_dim_4, page_block_size, i_dim, INP_EMB_EMB_OFFSET, 
+            inp_embedding_4[i_batch * emb_dim_4 * n_sequence + i_sequence * emb_dim_4 + i_dim]);
+        set_page_table_value_float4(page_table, i_batch, n_sequence, i_sequence, emb_dim_4, page_block_size, i_dim, V_CACHE_EMB_OFFSET, 
+            v_cache_4[i_batch * emb_dim_4 * n_sequence + i_sequence * emb_dim_4 + i_dim]);
+        set_page_table_value_float4(page_table, i_batch, n_sequence, i_sequence, emb_dim_4, page_block_size, i_dim, K_CACHE_EMB_OFFSET, 
+            float4{
+                kt_cache_shared_float_p[threadIdx.x * 4 * TILE_SIZE + threadIdx.y],
+                kt_cache_shared_float_p[(threadIdx.x * 4 + 1) * TILE_SIZE + threadIdx.y],
+                kt_cache_shared_float_p[(threadIdx.x * 4 + 2) * TILE_SIZE + threadIdx.y],
+                kt_cache_shared_float_p[(threadIdx.x * 4 + 3) * TILE_SIZE + threadIdx.y]});
     }
 }
 
@@ -184,7 +204,8 @@ void launch_clone_inp_embedding_k_v_cache(
     const float* v_cache, const int* lengths, int n_batch, int n_sequence, int emb_dim) {
 
     dim3 blockDim(TILE_SIZE, TILE_SIZE);
-    dim3 gridDim(ceil_div(emb_dim, TILE_SIZE), ceil_div(n_sequence, TILE_SIZE), n_batch);
+    assert(emb_dim % 4 == 0);
+    dim3 gridDim(ceil_div(emb_dim / 4, TILE_SIZE), ceil_div(n_sequence, TILE_SIZE), n_batch);
     clone_inp_embedding_k_v_cache<<<gridDim, blockDim>>>(page_table, inp_embedding, kt_cache, v_cache, lengths, n_batch, n_sequence, emb_dim, PAGE_BLOCK_SIZE);
     CUDA_CHECK_LAST();
 }
