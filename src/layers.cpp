@@ -2,6 +2,7 @@
 #include "layers.h"
 #include <stdexcept>
 #include "kernels/gemm.h"
+#include "kernels/paged_attention.h"
 #include "kernels/self_attention_inference_optimized.h"
 #include "kernels/decoder.h"
 #include "kernels/encoder.h"
@@ -65,6 +66,22 @@ void SelfAttentionLayer::forward(const TensorFloat& inp_embedding, const TensorI
         v_cache_, q_output_, qkt_output_, attention_result, n_new_items);
 }
 
+
+PagedAttentionLayer::PagedAttentionLayer(TensorFloat&& wk, TensorFloat&& wq, TensorFloat&& wv,
+    size_t n_batch, size_t emb_dim, size_t n_sequence): wk_(std::move(wk)), wq_(std::move(wq)), wv_(std::move(wv)),
+    q_output_({n_batch, emb_dim}, DeviceType::DEVICE),
+    qkt_output_({n_batch, n_sequence}, DeviceType::DEVICE) { }
+
+
+void PagedAttentionLayer::forward(TensorFloatPoint& page_table, const TensorInt& lengths,
+        const TensorInt& new_batch_idx, TensorFloat& attention_result, int n_new_items) {
+
+    int n_sequence = qkt_output_.shape()[1];
+    paged_attention(page_table, lengths, wk_, wq_, wv_, new_batch_idx, q_output_, qkt_output_,
+        attention_result, n_new_items, n_sequence);
+}
+
+
 void EncoderLayer::forward(const TensorFloat& emb_table, const TensorFloat& pos_emb, const TensorInt& inp,
     TensorFloat& inp_embedding, const TensorInt& lengths,
     const TensorInt& new_item_indices, int n_new_items) {
@@ -78,6 +95,19 @@ void EncoderLayer::forward(const TensorFloat& emb_table, const TensorFloat& pos_
         lengths.data(), new_item_indices.data(), n_batch, n_sequence, embedding_dim, n_new_items);
 }
 
+void PagedEncoderLayer::forward(const TensorFloat& emb_table, const TensorFloat& pos_emb, const TensorInt& inp,
+    TensorFloatPoint& page_table, const TensorInt& lengths,
+    const TensorInt& new_item_indices, int n_new_items) {
+
+    int n_batch = inp.shape()[0];
+    int n_sequence = inp.shape()[1];
+    int emb_dim = emb_table.shape()[1];
+
+    launch_paged_attention_encoder_kernel(
+        emb_table.data(), pos_emb.data(), inp.data(), page_table.data(), lengths.data(),
+        new_item_indices.data(), n_batch, n_sequence, emb_dim, n_new_items);
+}
+
 DecoderLayer::DecoderLayer(size_t n_batch, size_t n_vocab): emb_score_(TensorFloat({n_batch, n_vocab}, DeviceType::DEVICE)) { }
 
 void DecoderLayer::forward(const TensorFloat& batch_result, const TensorFloat& emb_table,
@@ -85,4 +115,13 @@ void DecoderLayer::forward(const TensorFloat& batch_result, const TensorFloat& e
     TensorFloat& inp_embedding, TensorInt& lengths, TensorInt& decoder_result) {
 
     launch_decoder(batch_result, emb_table, emb_score_, wpe_table, inp_embedding, lengths, decoder_result);
+}
+
+PagedDecoderLayer::PagedDecoderLayer(size_t n_batch, size_t n_vocab): emb_score_(TensorFloat({n_batch, n_vocab}, DeviceType::DEVICE)) { }
+
+void PagedDecoderLayer::forward(const TensorFloat& batch_result, const TensorFloat& emb_table,
+    const TensorFloat& wpe_table,
+    TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result) {
+
+    launch_paged_attention_decoder(batch_result, emb_table, emb_score_, wpe_table, page_table, lengths, decoder_result);
 }
