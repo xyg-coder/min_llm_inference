@@ -85,6 +85,16 @@ TensorFloat get_random_device_tensor(const std::vector<size_t> &shape, float rat
     return device_tensor;
 }
 
+TensorFloat get_random_device_emb_table(size_t emb_dim, size_t n_vocab, float eof_larger_ratio) {
+    auto emb_device_host = get_random_device_host_tensor({n_vocab, emb_dim});
+    float* emb_host_data = emb_device_host.second.data();
+    for (int i = 0; i < emb_dim; ++i) {
+        emb_host_data[EOF_TOKEN_ID * emb_dim + i] *= eof_larger_ratio;
+    }
+    emb_device_host.first.copy_from(emb_device_host.second);
+    return emb_device_host.first;
+}
+
 TensorInt get_random_device_tensor_int(const std::vector<size_t> &shape, int max_val) {
     TensorInt device_tensor(shape, DeviceType::DEVICE);    
     size_t total_size = 1;

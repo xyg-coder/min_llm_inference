@@ -74,9 +74,10 @@
 // }
 
 TEST(InferenceTest, Compare2Inferences) {
-    size_t max_batches = get_random_number(128, 512) / 2 * 2;
+    int n_block_ratio = get_random_number(2, 5);
+    size_t max_batches = get_random_number(128, 512) / n_block_ratio * n_block_ratio;
     size_t n_blocks = DEFAULT_INIT_NUM_BLOCKS * max_batches;
-    size_t n_sequence = PAGE_BLOCK_SIZE * DEFAULT_INIT_NUM_BLOCKS * 2;
+    size_t n_sequence = PAGE_BLOCK_SIZE * DEFAULT_INIT_NUM_BLOCKS * n_block_ratio;
     size_t emb_dims = get_random_number(64, 128) * 4;
     size_t n_vocab = get_random_number(EOF_TOKEN_ID + 1, EOF_TOKEN_ID + 1024);
 
@@ -84,7 +85,7 @@ TEST(InferenceTest, Compare2Inferences) {
     PagedAttentionTestWrapper wrapper = mock_paged_attention_test_wrapper(
         max_batches, n_sequence, emb_dims, n_blocks, new_item_lengths);
 
-    TensorFloat emb_table = get_random_device_tensor({n_vocab, emb_dims});
+    TensorFloat emb_table = get_random_device_emb_table(emb_dims, n_vocab);
     TensorFloat pos_table = get_random_device_tensor({n_sequence, emb_dims});
 
     TensorFloat wk = get_random_device_tensor({emb_dims, emb_dims});
@@ -125,6 +126,7 @@ TEST(InferenceTest, Compare2Inferences) {
     int allocated_memory = n_blocks * PAGE_BLOCK_SIZE * 3 * emb_dims;
     assert(allocated_memory % (3 * emb_dims * n_sequence) == 0);
     int n_batch = allocated_memory / (3 * emb_dims * n_sequence);
+    std::cout << "Pre-allocate batch=" << n_batch << ", paged_attention batch=" << max_batches << std::endl;
 
     InferenceModel model_2(
         SelfAttentionLayer(
