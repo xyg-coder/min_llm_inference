@@ -1,6 +1,7 @@
 #include "inferencer.h"
 #include "inference_model.h"
 #include "items_storage.h"
+#include "paged_item_storage.h"
 #include "tensor.hpp"
 #include <vector>
 
@@ -26,12 +27,45 @@ void start_inference_engine(const TensorFloat& emb_table, const TensorFloat& pos
     TensorInt decoder_result_host({n_batch_size}, DeviceType::HOST);
     
     while (!is_done(item_storage, processing_storage)) {
-        inference_model.forward(inp_device, lengths_device, new_items_indices_device, decoder_result_device, n_new_items);
+        inference_model.forward(inp_device, lengths_device, new_items_indices_device, decoder_result_device, n_new_items,
+            emb_table, pos_table);
 
         finished_indices = process_decoder_result(
             decoder_result_device, decoder_result_host, item_storage, processing_storage, n_sequence);
         n_new_items = insert_new_items(
             finished_indices, inp_device, inp_host, lengths_device,
             lengths_host, new_items_indices_device, new_items_indices_host, item_storage, processing_storage);
+    }
+}
+
+void start_paged_attention_inference_engine(const TensorFloat& emb_table, const TensorFloat& pos_table,
+    ItemStorage& item_storage, ProcessingStorage& processing_storage,
+    MemoryBlockManager& memory_block_manager, PagedAttentionsManager& paged_attention_manager,
+    PagedAttentionInferenceModel& inference_model, size_t n_batch_size, size_t n_sequence) {
+
+    TensorInt inp_device({n_batch_size, n_sequence}, DeviceType::DEVICE);
+    TensorInt inp_host({n_batch_size, n_sequence}, DeviceType::HOST);
+    TensorInt lengths_device({n_batch_size}, DeviceType::DEVICE);
+    TensorInt lengths_host({n_batch_size}, DeviceType::HOST);
+    TensorInt new_items_indices_device({n_batch_size}, DeviceType::DEVICE);
+    TensorInt new_items_indices_host({n_batch_size}, DeviceType::HOST);
+
+    std::vector<int> new_item_indices = insert_new_items(
+        inp_device, inp_host, lengths_device, lengths_host, new_items_indices_device, new_items_indices_host,
+        item_storage, processing_storage, memory_block_manager, paged_attention_manager);
+    
+    TensorInt decoder_result_device({n_batch_size}, DeviceType::DEVICE);
+    TensorInt decoder_result_host({n_batch_size}, DeviceType::HOST);
+
+    std::vector<int> finished_indices;
+    while (!is_done(item_storage, processing_storage)) {
+        inference_model.forward(inp_device, lengths_device, new_items_indices_device, decoder_result_device,
+            new_item_indices.size(), emb_table, pos_table, paged_attention_manager.get_page_table_device());
+        finished_indices = process_decoder_result(
+            decoder_result_device, decoder_result_host, item_storage, processing_storage, n_sequence);
+        allocate_or_free_memory_blocks_if_needed(paged_attention_manager, memory_block_manager, processing_storage, item_storage, finished_indices);
+        new_item_indices = insert_new_items(
+            inp_device, inp_host, lengths_device, lengths_host, new_items_indices_device, new_items_indices_host,
+            item_storage, processing_storage, memory_block_manager, paged_attention_manager);
     }
 }

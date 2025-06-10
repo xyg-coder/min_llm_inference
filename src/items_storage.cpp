@@ -180,3 +180,11 @@ const IdTokensPair& ItemStorage::get_top() const {
 const IdTokensPair& Storage::get_top() const {
     return data_.front();
 }
+
+const std::list<IdTokensPair>& ItemStorage::get_finished_items() const {
+    return finished_items_.get_data();
+}
+
+const std::list<IdTokensPair>& Storage::get_data() const {
+    return data_;
+}

@@ -132,11 +132,12 @@ __global__ void clone_inp_embedding_k_v_cache(
     __syncthreads();
     const float* kt_cache_shared_float_p = reinterpret_cast<const float*>(kt_cache_shared);
     if (i_sequence <= max_to_clone_index && i_dim < emb_dim_4) {
-        set_page_table_value_float4(page_table, i_batch, n_sequence, i_sequence, emb_dim_4, page_block_size, i_dim, INP_EMB_EMB_OFFSET, 
+        float4* page_pos = reinterpret_cast<float4*>(page_table[i_batch * (n_sequence / page_block_size) + i_sequence / page_block_size]);
+        set_page_table_value_float4(page_pos, i_batch, n_sequence, i_sequence, emb_dim_4, page_block_size, i_dim, INP_EMB_EMB_OFFSET, 
             inp_embedding_4[i_batch * emb_dim_4 * n_sequence + i_sequence * emb_dim_4 + i_dim]);
-        set_page_table_value_float4(page_table, i_batch, n_sequence, i_sequence, emb_dim_4, page_block_size, i_dim, V_CACHE_EMB_OFFSET, 
+        set_page_table_value_float4(page_pos, i_batch, n_sequence, i_sequence, emb_dim_4, page_block_size, i_dim, V_CACHE_EMB_OFFSET, 
             v_cache_4[i_batch * emb_dim_4 * n_sequence + i_sequence * emb_dim_4 + i_dim]);
-        set_page_table_value_float4(page_table, i_batch, n_sequence, i_sequence, emb_dim_4, page_block_size, i_dim, K_CACHE_EMB_OFFSET, 
+        set_page_table_value_float4(page_pos, i_batch, n_sequence, i_sequence, emb_dim_4, page_block_size, i_dim, K_CACHE_EMB_OFFSET, 
             float4{
                 kt_cache_shared_float_p[threadIdx.x * 4 * TILE_SIZE + threadIdx.y],
                 kt_cache_shared_float_p[(threadIdx.x * 4 + 1) * TILE_SIZE + threadIdx.y],

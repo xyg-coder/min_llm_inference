@@ -29,6 +29,7 @@ public:
     void maybe_flush_changes();
     void add_batch_block_pair(BatchIdMemoryBlocksPair&&);
     void set_block_pos(int batch_id, int i_block, float*);
+    TensorFloatPoint& get_page_table_device();
 private:
     // For each pointer, it includes 3 blocks of data:
     // <[PAGE_BLOCK_SIZE, emb_dim], [PAGE_BLOCK_SIZE, emb_dim], [PAGE_BLOCK_SIZE, emb_dim]>

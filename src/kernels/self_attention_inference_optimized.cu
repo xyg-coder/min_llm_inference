@@ -127,7 +127,7 @@ __global__ void get_latest_kt_q_v(
         __syncthreads();
         if (output_col_idx < output_dim) {
 
-            for (int j = 0; j < TILE_SIZE_SQUARE; ++j) {
+            for (int j = 0; j < TILE_SIZE_SQUARE && i + j < input_dim; ++j) {
                 k_result += (inp_shared[j] * wk[(i + j) * output_dim + output_col_idx]);
                 v_result += (inp_shared[j] * wv[(i + j) * output_dim + output_col_idx]);
                 q_result += (inp_shared[j] * wq[(i + j) * output_dim + output_col_idx]);
@@ -172,7 +172,7 @@ __global__ void qkt(
         }
         __syncthreads();
 
-        for (int j = 0; result_col < cur_batch_length && j < TILE_SIZE_SQUARE; ++j) {
+        for (int j = 0; result_col < cur_batch_length && j < TILE_SIZE_SQUARE && i + j < dim; ++j) {
             result += (q_shared[j] * base_kt[(i + j) * n_sequence + result_col]);
         }
         __syncthreads();

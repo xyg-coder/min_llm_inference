@@ -47,8 +47,11 @@ make # build and run tests
 
 * See [debug_in_vscode.md](./doc/debug_in_vscode.md) to see how to use breakpoint in vscode.
 
+## Paged Attention
+
+* One simple paged attention is also implemented. And from experiments, it seems the gains are large when the results are short.
+
 ## Plan
 
-* Under the same gpu memory, compare between old way and paged attention.
 * Learn the way to profile and benchmark.
 * How to use multi-gpus to accelerate

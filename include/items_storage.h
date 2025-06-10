@@ -18,6 +18,7 @@ public:
     int size() const;
     int head_length() const;
     const IdTokensPair& get_top() const;
+    const std::list<IdTokensPair>& get_data() const;
 private:
     std::list<IdTokensPair> data_;
 };
@@ -39,6 +40,7 @@ public:
     int new_count() const;
     // the length of the new_items_.begin()
     int head_length() const;
+    const std::list<IdTokensPair>& get_finished_items() const;
 private:
     Storage finished_items_;
     Storage new_items_; 

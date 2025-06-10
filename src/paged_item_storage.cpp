@@ -172,6 +172,10 @@ void PagedAttentionsManager::set_block_pos(int batch_id, int i_block, float* mem
     needs_sync_ = true;
 }
 
+TensorFloatPoint& PagedAttentionsManager::get_page_table_device() {
+    return page_table_device;
+}
+
 void PagedAttentionsManager::add_batch_block_pair(BatchIdMemoryBlocksPair&& pair) {
     int batch_id = pair.first;
     const std::list<float*>& blocks = pair.second;
