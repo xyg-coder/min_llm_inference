@@ -38,10 +38,11 @@ __global__ void fill_new_k_v_cache_paged_attention(
     int page_table_width = n_sequence / PAGE_BLOCK_SIZE;
     float** base_table = page_table + batch_idx * page_table_width;
 
+    float* page_pos = page_table[batch_idx * (n_sequence / PAGE_BLOCK_SIZE) + output_row_idx / PAGE_BLOCK_SIZE];
     for (int i = 0; i < emb_dim; i += TILE_SIZE) {
         if (output_row_idx < cur_batch_length && i + threadIdx.x < emb_dim) {
             inp_shared[threadIdx.y][threadIdx.x] = get_page_table_value(
-                (const float**)page_table, batch_idx, n_sequence, output_row_idx, emb_dim, PAGE_BLOCK_SIZE,
+                page_pos, batch_idx, n_sequence, output_row_idx, emb_dim, PAGE_BLOCK_SIZE,
                 i + threadIdx.x, INP_EMB_EMB_OFFSET);
         } else {
             inp_shared[threadIdx.y][threadIdx.x] = 0.0f;
@@ -72,9 +73,9 @@ __global__ void fill_new_k_v_cache_paged_attention(
         __syncthreads();
     }
     if (output_row_idx < cur_batch_length && output_col_idx < emb_dim) {
-        set_page_table_value(page_table, batch_idx, n_sequence, output_row_idx, emb_dim,
+        set_page_table_value(page_pos, batch_idx, n_sequence, output_row_idx, emb_dim,
             PAGE_BLOCK_SIZE, output_col_idx, K_CACHE_EMB_OFFSET, k_result);
-        set_page_table_value(page_table, batch_idx, n_sequence, output_row_idx, emb_dim,
+        set_page_table_value(page_pos, batch_idx, n_sequence, output_row_idx, emb_dim,
             PAGE_BLOCK_SIZE, output_col_idx, V_CACHE_EMB_OFFSET, v_result);
     }
 }
@@ -133,10 +134,11 @@ __global__ void get_latest_k_q_v_paged_attention(
     float k_result = 0;
     float q_result = 0;
     float v_result = 0;
+    float* page_pos = page_table[i_batch * (n_sequence / PAGE_BLOCK_SIZE) + i_sequence / PAGE_BLOCK_SIZE];
 
     for (int i = 0; i < emb_dim; i += TILE_SIZE_SQUARE) {
         if (i + threadIdx.x < emb_dim) {
-            inp_shared[threadIdx.x] = get_page_table_value((const float**)page_table, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x, INP_EMB_EMB_OFFSET);
+            inp_shared[threadIdx.x] = get_page_table_value(page_pos, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x, INP_EMB_EMB_OFFSET);
         } else {
             inp_shared[threadIdx.x] = 0.0f;
         }
@@ -152,8 +154,8 @@ __global__ void get_latest_k_q_v_paged_attention(
         __syncthreads();
     }
     if (output_col_idx < emb_dim) {
-        set_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, K_CACHE_EMB_OFFSET, k_result);
-        set_page_table_value(page_table, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, V_CACHE_EMB_OFFSET, v_result);
+        set_page_table_value(page_pos, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, K_CACHE_EMB_OFFSET, k_result);
+        set_page_table_value(page_pos, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, V_CACHE_EMB_OFFSET, v_result);
         q_output[i_batch * emb_dim + output_col_idx] = q_result;
     }
 }
@@ -210,10 +212,16 @@ __global__ void qkt_paged_attention(
             q_shared[threadIdx.x] = 0.0f;
         }
         
+        int i_block = -1;
+        const float* page_pos = nullptr;
         for (int i_sequence = blockIdx.x * TILE_SIZE; i_sequence < blockIdx.x * TILE_SIZE + TILE_SIZE && i_sequence < cur_batch_length; i_sequence++) {
             if (i + threadIdx.x < emb_dim) {
+                if (i_sequence / PAGE_BLOCK_SIZE != i_block) {
+                    i_block = i_sequence / PAGE_BLOCK_SIZE;
+                    page_pos = page_table[batch_i * (n_sequence / PAGE_BLOCK_SIZE) + i_block];
+                }
                 k_shared[i_sequence - blockIdx.x * TILE_SIZE][threadIdx.x] = get_page_table_value(
-                    page_table, batch_i, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x, K_CACHE_EMB_OFFSET);
+                    page_pos, batch_i, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x, K_CACHE_EMB_OFFSET);
             } else {
                 k_shared[i_sequence - blockIdx.x * TILE_SIZE][threadIdx.x] = 0.0f;
             }
@@ -266,6 +274,8 @@ __global__ void softmax_v_paged_attention(
     const float* softmax_result_base = softmax_result + i_batch * n_sequence;
     int write_col = blockIdx.x * TILE_SIZE_SQUARE + threadIdx.x;
 
+    int i_block = -1;
+    const float* page_pos = nullptr;
     for (int i = 0; i < cur_batch_length; i += TILE_SIZE_SQUARE) {
         if (i + threadIdx.x < cur_batch_length) {
             softmax_res_share[threadIdx.x] = softmax_result_base[i + threadIdx.x];
@@ -274,7 +284,11 @@ __global__ void softmax_v_paged_attention(
         }
         __syncthreads();
         for (int j = 0; write_col < emb_dim && j < TILE_SIZE_SQUARE && i + j < cur_batch_length; ++j) {
-            result += (softmax_res_share[j] * get_page_table_value(page_table, i_batch, n_sequence, i + j, emb_dim, PAGE_BLOCK_SIZE, write_col, V_CACHE_EMB_OFFSET));
+            if (i_block != (i + j) / PAGE_BLOCK_SIZE) {
+                i_block = (i + j) / PAGE_BLOCK_SIZE;
+                page_pos = page_table[i_batch * (n_sequence / PAGE_BLOCK_SIZE) + i_block];
+            }
+            result += (softmax_res_share[j] * get_page_table_value(page_pos, i_batch, n_sequence, i + j, emb_dim, PAGE_BLOCK_SIZE, write_col, V_CACHE_EMB_OFFSET));
         }
         __syncthreads();
     }
