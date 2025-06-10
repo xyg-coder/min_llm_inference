@@ -143,7 +143,7 @@ __global__ void get_latest_k_q_v_paged_attention(
 
         __syncthreads();
         if (output_col_idx < emb_dim) {
-            for (int j = 0; j < TILE_SIZE_SQUARE; ++j) {
+            for (int j = 0; j < TILE_SIZE_SQUARE && i + j < emb_dim; ++j) {
                 k_result += (inp_shared[j] * wk[(i + j) * emb_dim + output_col_idx]);
                 v_result += (inp_shared[j] * wv[(i + j) * emb_dim + output_col_idx]);
                 q_result += (inp_shared[j] * wq[(i + j) * emb_dim + output_col_idx]);
