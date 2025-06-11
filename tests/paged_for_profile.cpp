@@ -1,15 +1,13 @@
+
 #include "constants.h"
 #include "inference_model.h"
 #include "inferencer.h"
-#include "items_storage.h"
-#include "layers.h"
 #include "test_utils.h"
-#include <cassert>
-#include <gtest/gtest.h>
-#include <iostream>
-#include <unordered_map>
+#include <chrono>
 
-TEST(InferenceCompareTest, Compare2Inferences) {
+
+
+int main() {
     int n_block_ratio = get_random_number(100, 200);
     size_t max_batches = get_random_number(256, 512) / n_block_ratio * n_block_ratio * 3;
     size_t n_blocks = DEFAULT_INIT_NUM_BLOCKS * max_batches;
@@ -58,43 +56,4 @@ TEST(InferenceCompareTest, Compare2Inferences) {
         model, max_batches, n_sequence);
     auto paged_attention_end = std::chrono::high_resolution_clock::now();
     auto paged_attention_duration = std::chrono::duration_cast<std::chrono::milliseconds>(paged_attention_end - paged_attention_start);
-
-    size_t allocated_memory = n_blocks * PAGE_BLOCK_SIZE * 3 * emb_dims;
-    assert(allocated_memory % (3 * emb_dims * n_sequence) == 0);
-    int n_batch = allocated_memory / (3 * emb_dims * n_sequence);
-
-    InferenceModel model_2(
-        SelfAttentionLayer(
-            std::move(wk_2),
-            std::move(wq_2),
-            std::move(wv_2),
-            n_batch, emb_dims, n_sequence),
-        EncoderLayer(),
-        DecoderLayer(n_batch, n_vocab),
-        n_batch, n_sequence, emb_dims);
-    auto pre_allocate_start = std::chrono::high_resolution_clock::now();
-    start_inference_engine(
-        emb_table, pos_table, item_storage_2,
-        processing_storage_2,
-        model_2, n_batch, n_sequence);
-    auto pre_allocate_end = std::chrono::high_resolution_clock::now();
-    auto pre_allocate_duration = std::chrono::duration_cast<std::chrono::milliseconds>(pre_allocate_end - pre_allocate_start);
-    std::cout << "Paged attention takes " << paged_attention_duration.count() << " ms" << std::endl;
-    std::cout << "Pre-allocate takes " << pre_allocate_duration.count() << " ms" << std::endl;
-    ASSERT_EQ(wrapper.item_storage.finish_count(), max_batches * 2);
-    ASSERT_EQ(item_storage_2.finish_count(), max_batches * 2);
-
-    const std::list<IdTokensPair>& paged_finished_results = wrapper.item_storage.get_finished_items();
-    const std::list<IdTokensPair>& finished_results_to_compare = wrapper.item_storage.get_finished_items();
-    std::unordered_map<int, std::vector<int>> paged_result_map;
-    for (const IdTokensPair& pair : paged_finished_results) {
-        paged_result_map[pair.first] = pair.second;
-    }
-    for (const IdTokensPair& pair : finished_results_to_compare) {
-        const std::vector<int>& paged_result = paged_result_map[pair.first];
-        ASSERT_EQ(paged_result.size(), pair.second.size());
-        for (int i = 0; i < paged_result.size(); ++i) {
-            ASSERT_EQ(paged_result[i], pair.second[i]);
-        }
-    }
 }

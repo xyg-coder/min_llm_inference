@@ -12,7 +12,6 @@
 #include <cmath>
 #include <cstdio>
 #include <random>
-#include <gtest/gtest.h>
 #include <utility>
 #include <vector>
 #include "self_attention_inference_optimized_host.h"
@@ -125,8 +124,7 @@ void assert_near_on_host(const TensorFloat &tensor_device, const TensorFloat &te
     const float* copy_from_device_ptr = copy_from_device.data();
     const float* host_tensor_ptr = tensor_host.data();
     for (size_t i = 0; i < total_size; ++i) {
-        ASSERT_NEAR(copy_from_device_ptr[i], host_tensor_ptr[i], threshold)
-            << "Mismatch at (" << i <<  ")";
+        assert(std::fabs(copy_from_device_ptr[i] - host_tensor_ptr[i]) <= threshold);
     }
 }
 
@@ -138,8 +136,7 @@ void assert_near_on_host(const TensorInt &tensor_device, const TensorInt &tensor
     const int* copy_from_device_ptr = copy_from_device.data();
     const int* host_tensor_ptr = tensor_host.data();
     for (size_t i = 0; i < total_size; ++i) {
-        ASSERT_EQ(copy_from_device_ptr[i], host_tensor_ptr[i])
-            << "Mismatch at (" << i <<  ")";
+        assert(copy_from_device_ptr[i] == host_tensor_ptr[i]);
     }
 }
 

@@ -63,6 +63,13 @@ target_include_directories(min_llm_inference
         ${CUDAToolkit_INCLUDE_DIRS}
 )
 
+add_executable(to_profile ${TESTS_DIR}/paged_for_profile.cpp ${TESTS_DIR}/test_utils.cpp)
+
+target_link_libraries(to_profile
+    min_llm_inference
+)
+target_include_directories(to_profile PRIVATE ${TESTS_DIR}/include)
+
 # Add Google Test
 include(FetchContent)
 FetchContent_Declare(
@@ -90,5 +97,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
 
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
 endforeach()
+
+
 
 enable_testing()
