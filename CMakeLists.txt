@@ -81,23 +81,27 @@ FetchContent_MakeAvailable(googletest)
 
 file(GLOB TEST_SOURCES "${TESTS_DIR}/*_test.cpp")
 
-foreach(TEST_SRC ${TEST_SOURCES})
-    # extract just the filename without extension (e.g. feed_forward_test)
-    get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
+option(BUILD_TESTS "Build test executables" OFF)
 
-    add_executable(${TEST_NAME} ${TEST_SRC} ${TESTS_DIR}/test_utils.cpp)
+if (BUILD_TESTS)
+    foreach(TEST_SRC ${TEST_SOURCES})
+        # extract just the filename without extension (e.g. feed_forward_test)
+        get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
 
-    target_link_libraries(${TEST_NAME}
-        min_llm_inference
-        gtest_main
-    )
+        add_executable(${TEST_NAME} ${TEST_SRC} ${TESTS_DIR}/test_utils.cpp)
 
-    # Add tests/include directory as *PRIVATE* to each test target
-    target_include_directories(${TEST_NAME} PRIVATE ${TESTS_DIR}/include)
+        target_link_libraries(${TEST_NAME}
+            min_llm_inference
+            gtest_main
+        )
 
-    add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
-endforeach()
+        # Add tests/include directory as *PRIVATE* to each test target
+        target_include_directories(${TEST_NAME} PRIVATE ${TESTS_DIR}/include)
+
+        add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+    endforeach()
 
 
 
-enable_testing()
+    enable_testing()
+endif()
