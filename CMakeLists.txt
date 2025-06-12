@@ -65,10 +65,20 @@ target_include_directories(min_llm_inference
 
 add_executable(to_profile ${TESTS_DIR}/paged_for_profile.cpp ${TESTS_DIR}/test_utils.cpp)
 
-target_link_libraries(to_profile
-    min_llm_inference
-)
-target_include_directories(to_profile PRIVATE ${TESTS_DIR}/include)
+# CUDA Toolkit typically installs NVTX in a standard location
+find_path(NVTX_INCLUDE_DIR nvtx3/nvToolsExt.h
+          PATHS "$ENV{CUDA_PATH}/include" "/usr/local/cuda/include" "/opt/cuda/include")
+
+find_library(NVTX_LIBRARY nvToolsExt
+             PATHS "$ENV{CUDA_PATH}/lib64" "/usr/local/cuda/lib64" "/opt/cuda/lib64")
+
+if (NVTX_INCLUDE_DIR AND NVTX_LIBRARY)
+    target_include_directories(to_profile PRIVATE ${TESTS_DIR}/include ${NVTX_INCLUDE_DIR})
+    target_link_libraries(to_profile PRIVATE ${NVTX_LIBRARY} min_llm_inference)
+else()
+    message(FATAL_ERROR "NVTX not found! Make sure CUDA Toolkit is installed.")
+endif()
+
 
 # Add Google Test
 include(FetchContent)

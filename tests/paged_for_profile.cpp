@@ -4,7 +4,7 @@
 #include "inferencer.h"
 #include "test_utils.h"
 #include <chrono>
-
+#include <nvtx3/nvToolsExt.h>
 
 
 int main() {
@@ -51,9 +51,11 @@ int main() {
         max_batches, n_sequence, emb_dims);
     
     auto paged_attention_start = std::chrono::high_resolution_clock::now();
+    nvtxRangePushA("page_attention_inference_engine");
     start_paged_attention_inference_engine(
         emb_table, pos_table, wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager,
         model, max_batches, n_sequence);
+    nvtxRangePop();
     auto paged_attention_end = std::chrono::high_resolution_clock::now();
     auto paged_attention_duration = std::chrono::duration_cast<std::chrono::milliseconds>(paged_attention_end - paged_attention_start);
 }
