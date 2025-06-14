@@ -51,7 +51,23 @@ make # build and run tests
 
 * One simple paged attention is also implemented. And from experiments, it seems the gains are large when the results are short.
 
+## Profiling Result
+
+`./build/to_profile`
+
+### Non-pinned memory
+
+Total tokens: 197013, seconds: 18.812, throughput: 10472.7
+
+In `process_decoder_result`, `copy_from` takes 91ms.
+
+### Pinned memory
+
+Total tokens: 196684, seconds: 18.987, throughput: 10358.9
+
+In `process_decoder_result`, `copy_from` takes 91ms.
+
 ## Plan
 
-* Learn the way to profile and benchmark.
+* `decoder_result` should be larger. So one time, we can clone much larger. And this can make insert_new less called.
 * How to use multi-gpus to accelerate

@@ -272,7 +272,7 @@ void AsyncTensorData<T>::record_event() const {
 template <typename T>
 SyncTensorData<T>::SyncTensorData(size_t size, DeviceType device): TensorData<T>(size, device) {
     if (device == DeviceType::HOST) {
-        this->data_ = new T[this->size_];
+        cudaHostAlloc(&this->data_, this->size_ * sizeof(T), cudaHostAllocDefault);
     } else {
         cudaMalloc(&this->data_, sizeof(T) * this->size_);
         CUDA_CHECK_LAST();
@@ -315,7 +315,7 @@ const T* SyncTensorData<T>::data() const {
 template <typename T>
 SyncTensorData<T>::~SyncTensorData() {
     if (this->device_ == DeviceType::HOST) {
-        delete[] this->data_;
+        cudaFreeHost(this->data_);
     } else {
         cudaFree(this->data_);
     }
