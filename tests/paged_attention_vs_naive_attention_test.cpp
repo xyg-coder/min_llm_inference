@@ -1,7 +1,7 @@
 #include "constants.h"
 #include "inference_model.h"
 #include "inferencer.h"
-#include "items_storage.h"
+#include "item_storage.h"
 #include "layers.h"
 #include "test_utils.h"
 #include <cassert>

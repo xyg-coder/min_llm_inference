@@ -26,3 +26,10 @@ void launch_paged_attention_decoder(
     TensorFloat& emb_score,
     const TensorFloat& wpe_table,
     TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result);
+
+
+void launch_paged_attention_decoder_multi_rounds(
+    const TensorFloat& batch_result, const TensorFloat& emb_table,
+    TensorFloat& emb_score,
+    const TensorFloat& wpe_table,
+    TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result, int i_decoder);

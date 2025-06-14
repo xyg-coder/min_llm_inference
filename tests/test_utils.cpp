@@ -3,7 +3,7 @@
 #include "include/test_utils.h"
 #include "kernels/rand_assign.h"
 #include "kernels/utils.cuh"
-#include "items_storage.h"
+#include "item_storage.h"
 #include "paged_item_storage.h"
 #include "tensor.hpp"
 #include <algorithm>

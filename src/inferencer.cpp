@@ -1,6 +1,6 @@
 #include "inferencer.h"
 #include "inference_model.h"
-#include "items_storage.h"
+#include "item_storage.h"
 #include "paged_item_storage.h"
 #include "tensor.hpp"
 #include "throughput_counter.h"
@@ -59,8 +59,8 @@ void start_paged_attention_inference_engine(const TensorFloat& emb_table, const 
         item_storage, processing_storage, memory_block_manager, paged_attention_manager);
     nvtxRangePop();
     
-    TensorInt decoder_result_device({n_batch_size}, DeviceType::DEVICE);
-    TensorInt decoder_result_host({n_batch_size}, DeviceType::HOST);
+    TensorInt decoder_result_device({n_batch_size, 1}, DeviceType::DEVICE);
+    TensorInt decoder_result_host({n_batch_size, 1}, DeviceType::HOST);
 
     std::vector<int> finished_indices;
     while (!is_done(item_storage, processing_storage)) {

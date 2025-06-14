@@ -1,7 +1,7 @@
 #pragma once
 
 #include "inference_model.h"
-#include "items_storage.h"
+#include "item_storage.h"
 #include "paged_item_storage.h"
 #include "tensor.hpp"
 

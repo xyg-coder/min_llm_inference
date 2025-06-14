@@ -1,6 +1,6 @@
 #include "paged_item_storage.h"
 #include "constants.h"
-#include "items_storage.h"
+#include "item_storage.h"
 #include "tensor.hpp"
 #include "utils.h"
 #include <cassert>
