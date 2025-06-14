@@ -30,7 +30,7 @@ __global__ void softmax(float* out, const float* inp, int N, int T) {
 
     // It's faster to load 4 floats altogether
     const float4* x_vec = reinterpret_cast<const float4*>(x);
-    for (int i = warp.thread_rank(); i < T / 4; i += warp.num_threads()) {
+    for (int i = warp.thread_rank(); i < T / 4; i += warp.size()) {
         float4 v = x_vec[i];
         float old_maxval = maxval;
         for (int k = 0; k < 4; k++) {
@@ -48,7 +48,7 @@ __global__ void softmax(float* out, const float* inp, int N, int T) {
     float norm = 1.f / sum;
     float4* out_vec = reinterpret_cast<float4*>(out + row_id * T);
     float output_temp[4];
-    for (int i = warp.thread_rank(); i < T / 4; i += warp.num_threads()) {
+    for (int i = warp.thread_rank(); i < T / 4; i += warp.size()) {
         float4 v = x_vec[i];
         for (int k = 0; k < 4; k++) {
             output_temp[k] = expf(vec_at(v, k) - global_maxval) * norm;
@@ -72,7 +72,7 @@ __global__ void softmax_in_place(float* inp, int N, int T) {
 
     // It's faster to load 4 floats altogether
     const float4* x_vec = reinterpret_cast<const float4*>(x);
-    for (int i = warp.thread_rank(); i < T / 4; i += warp.num_threads()) {
+    for (int i = warp.thread_rank(); i < T / 4; i += warp.size()) {
         float4 v = x_vec[i];
         float old_maxval = maxval;
         for (int k = 0; k < 4; k++) {
@@ -90,7 +90,7 @@ __global__ void softmax_in_place(float* inp, int N, int T) {
     float norm = 1.f / sum;
     float4* out_vec = reinterpret_cast<float4*>(inp + row_id * T);
     float output_temp[4];
-    for (int i = warp.thread_rank(); i < T / 4; i += warp.num_threads()) {
+    for (int i = warp.thread_rank(); i < T / 4; i += warp.size()) {
         float4 v = x_vec[i];
         for (int k = 0; k < 4; k++) {
             output_temp[k] = expf(vec_at(v, k) - global_maxval) * norm;

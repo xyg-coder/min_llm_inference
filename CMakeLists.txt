@@ -63,6 +63,23 @@ target_include_directories(min_llm_inference
         ${CUDAToolkit_INCLUDE_DIRS}
 )
 
+add_executable(to_profile ${TESTS_DIR}/paged_for_profile.cpp ${TESTS_DIR}/test_utils.cpp)
+
+# CUDA Toolkit typically installs NVTX in a standard location
+find_path(NVTX_INCLUDE_DIR nvtx3/nvToolsExt.h
+          PATHS "$ENV{CUDA_PATH}/include" "/usr/local/cuda/include" "/opt/cuda/include")
+
+find_library(NVTX_LIBRARY nvToolsExt
+             PATHS "$ENV{CUDA_PATH}/lib64" "/usr/local/cuda/lib64" "/opt/cuda/lib64")
+
+if (NVTX_INCLUDE_DIR AND NVTX_LIBRARY)
+    target_include_directories(to_profile PRIVATE ${TESTS_DIR}/include ${NVTX_INCLUDE_DIR})
+    target_link_libraries(to_profile PRIVATE ${NVTX_LIBRARY} min_llm_inference)
+else()
+    message(FATAL_ERROR "NVTX not found! Make sure CUDA Toolkit is installed.")
+endif()
+
+
 # Add Google Test
 include(FetchContent)
 FetchContent_Declare(
@@ -74,21 +91,27 @@ FetchContent_MakeAvailable(googletest)
 
 file(GLOB TEST_SOURCES "${TESTS_DIR}/*_test.cpp")
 
-foreach(TEST_SRC ${TEST_SOURCES})
-    # extract just the filename without extension (e.g. feed_forward_test)
-    get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
+option(BUILD_TESTS "Build test executables" OFF)
 
-    add_executable(${TEST_NAME} ${TEST_SRC} ${TESTS_DIR}/test_utils.cpp)
+if (BUILD_TESTS)
+    foreach(TEST_SRC ${TEST_SOURCES})
+        # extract just the filename without extension (e.g. feed_forward_test)
+        get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
 
-    target_link_libraries(${TEST_NAME}
-        min_llm_inference
-        gtest_main
-    )
+        add_executable(${TEST_NAME} ${TEST_SRC} ${TESTS_DIR}/test_utils.cpp)
 
-    # Add tests/include directory as *PRIVATE* to each test target
-    target_include_directories(${TEST_NAME} PRIVATE ${TESTS_DIR}/include)
+        target_link_libraries(${TEST_NAME}
+            min_llm_inference
+            gtest_main
+        )
 
-    add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
-endforeach()
+        # Add tests/include directory as *PRIVATE* to each test target
+        target_include_directories(${TEST_NAME} PRIVATE ${TESTS_DIR}/include)
 
-enable_testing()
+        add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+    endforeach()
+
+
+
+    enable_testing()
+endif()

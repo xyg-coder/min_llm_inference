@@ -3,7 +3,9 @@
 #include "items_storage.h"
 #include "paged_item_storage.h"
 #include "tensor.hpp"
+#include "throughput_counter.h"
 #include <vector>
+#include <nvtx3/nvToolsExt.h>
 
 
 void start_inference_engine(const TensorFloat& emb_table, const TensorFloat& pos_table,
@@ -50,22 +52,34 @@ void start_paged_attention_inference_engine(const TensorFloat& emb_table, const 
     TensorInt new_items_indices_device({n_batch_size}, DeviceType::DEVICE);
     TensorInt new_items_indices_host({n_batch_size}, DeviceType::HOST);
 
+    nvtxRangePushA("insert_new_items");
+    get_global_throughput_counter().start_record();
     std::vector<int> new_item_indices = insert_new_items(
         inp_device, inp_host, lengths_device, lengths_host, new_items_indices_device, new_items_indices_host,
         item_storage, processing_storage, memory_block_manager, paged_attention_manager);
+    nvtxRangePop();
     
     TensorInt decoder_result_device({n_batch_size}, DeviceType::DEVICE);
     TensorInt decoder_result_host({n_batch_size}, DeviceType::HOST);
 
     std::vector<int> finished_indices;
     while (!is_done(item_storage, processing_storage)) {
+        nvtxRangePushA("forward");
         inference_model.forward(inp_device, lengths_device, new_items_indices_device, decoder_result_device,
             new_item_indices.size(), emb_table, pos_table, paged_attention_manager.get_page_table_device());
+        nvtxRangePop();
+        nvtxRangePushA("process_decoder_result");
         finished_indices = process_decoder_result(
             decoder_result_device, decoder_result_host, item_storage, processing_storage, n_sequence);
+        nvtxRangePop();
+        nvtxRangePushA("allocate_or_free_memory_blocks_if_needed");
         allocate_or_free_memory_blocks_if_needed(paged_attention_manager, memory_block_manager, processing_storage, item_storage, finished_indices);
+        nvtxRangePop();
+        nvtxRangePushA("insert_new_items");
         new_item_indices = insert_new_items(
             inp_device, inp_host, lengths_device, lengths_host, new_items_indices_device, new_items_indices_host,
             item_storage, processing_storage, memory_block_manager, paged_attention_manager);
+        nvtxRangePop();
     }
+    get_global_throughput_counter().print_throughput();
 }

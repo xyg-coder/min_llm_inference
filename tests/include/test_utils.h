@@ -109,4 +109,4 @@ public:
 
 TensorWrapperForPagedAttention generate_paged_attention_wrapper_device_tensors(size_t n_batch=1024, size_t n_sequence=1024, size_t emb_dim=32, std::optional<TensorInt> lengths_override=std::nullopt);
 
-TensorFloat get_random_device_emb_table(size_t emb_dim, size_t n_vocab, float eof_larger_ratio=5);
+TensorFloat get_random_device_emb_table(size_t emb_dim, size_t n_vocab, float eof_larger_ratio=1.1);

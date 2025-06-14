@@ -207,7 +207,7 @@ __global__ void softmax_in_place_with_lengths(
     const float4* qkt_vec4 = reinterpret_cast<const float4*>(qkt_base);
     int cur_length = lengths[row_id];
 
-    for (int i = warp.thread_rank(); i < (cur_length + 4  - 1) / 4; i += warp.num_threads()) {
+    for (int i = warp.thread_rank(); i < (cur_length + 4  - 1) / 4; i += warp.size()) {
         float4 v = qkt_vec4[i];
         float old_max_val = maxval;
         for (int j = 0; j < 4 && i * 4 + j < cur_length; ++j) {
@@ -226,7 +226,7 @@ __global__ void softmax_in_place_with_lengths(
     float temp[4];
     float4* out_vec = reinterpret_cast<float4*>(qkt + row_id * n_sequence);
 
-    for (int i = warp.thread_rank(); i < n_sequence / 4; i += warp.num_threads()) {
+    for (int i = warp.thread_rank(); i < n_sequence / 4; i += warp.size()) {
         float4 v = out_vec[i];
 
         #pragma unroll
