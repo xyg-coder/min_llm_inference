@@ -1,5 +1,6 @@
 #include "items_storage.h"
 #include "constants.h"
+#include "throughput_counter.h"
 #include <cassert>
 #include <utility>
 #include <vector>
@@ -99,12 +100,14 @@ std::vector<int> process_decoder_result(
     decoder_result_host.copy_from(decoder_result_device);
     const int* decode_result_data = decoder_result_host.data();
     std::vector<int> finished_indices;
+    int total_processed_tokens = 0;
     for (int i = 0; i < decoder_result_host.shape()[0]; ++i) {
         if (decode_result_data[i] == EMPTY_ROW_TOKEN_ID) {
             assert(!processing_storage.batch_id_processing(i));
             finished_indices.push_back(i);
         } else {
             append_token_to_id_string_pair(processing_storage.get_token(i), decode_result_data[i]);
+            total_processed_tokens++;
             if (processing_storage.get_token(i).second.size() >= n_sequence
                 || decode_result_data[i] == EOF_TOKEN_ID) {
 
@@ -113,6 +116,7 @@ std::vector<int> process_decoder_result(
             }
         }
     }
+    get_global_throughput_counter().add_record_if_recording(total_processed_tokens);
     return finished_indices;
 }
 

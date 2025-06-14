@@ -3,6 +3,7 @@
 #include "items_storage.h"
 #include "paged_item_storage.h"
 #include "tensor.hpp"
+#include "throughput_counter.h"
 #include <vector>
 #include <nvtx3/nvToolsExt.h>
 
@@ -52,6 +53,7 @@ void start_paged_attention_inference_engine(const TensorFloat& emb_table, const 
     TensorInt new_items_indices_host({n_batch_size}, DeviceType::HOST);
 
     nvtxRangePushA("insert_new_items");
+    get_global_throughput_counter().start_record();
     std::vector<int> new_item_indices = insert_new_items(
         inp_device, inp_host, lengths_device, lengths_host, new_items_indices_device, new_items_indices_host,
         item_storage, processing_storage, memory_block_manager, paged_attention_manager);
@@ -79,4 +81,5 @@ void start_paged_attention_inference_engine(const TensorFloat& emb_table, const 
             item_storage, processing_storage, memory_block_manager, paged_attention_manager);
         nvtxRangePop();
     }
+    get_global_throughput_counter().print_throughput();
 }

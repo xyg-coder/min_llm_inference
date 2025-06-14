@@ -1,13 +1,7 @@
 # Debug in Vscode
 
-Add to CMakeLists.txt (Seems this is not needed)
-
-```
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
-set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -g -G")
-```
-
-Use the synchronized `CUDA_CHECK_LAST()` version in [utils.h](../include/utils.h) so exceptions are thrown just after the cuda kernel that throws it.
+* Make sure gdb is installed.
+* `make debug_build`
 
 Example launcher.json
 
