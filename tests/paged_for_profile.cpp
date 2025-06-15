@@ -14,6 +14,7 @@ int main() {
     size_t n_sequence = PAGE_BLOCK_SIZE * DEFAULT_INIT_NUM_BLOCKS * n_block_ratio;
     size_t emb_dims = 512 * 4;
     size_t n_vocab = EOF_TOKEN_ID + 1;
+    int n_forward_rounds = 1;
 
     std::vector<int> new_item_lengths = create_random_vector(max_batches * 2, 1, PAGE_BLOCK_SIZE * DEFAULT_INIT_NUM_BLOCKS);
     PagedAttentionTestWrapper wrapper = mock_paged_attention_test_wrapper(
@@ -48,13 +49,13 @@ int main() {
             max_batches, emb_dims, n_sequence),
         PagedEncoderLayer(),
         PagedDecoderLayer(max_batches, n_vocab),
-        max_batches, n_sequence, emb_dims);
+        max_batches, n_sequence, emb_dims, n_forward_rounds);
     
     auto paged_attention_start = std::chrono::high_resolution_clock::now();
     nvtxRangePushA("page_attention_inference_engine");
     start_paged_attention_inference_engine(
         emb_table, pos_table, wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager,
-        model, max_batches, n_sequence);
+        model, max_batches, n_sequence, n_forward_rounds);
     nvtxRangePop();
     auto paged_attention_end = std::chrono::high_resolution_clock::now();
     auto paged_attention_duration = std::chrono::duration_cast<std::chrono::milliseconds>(paged_attention_end - paged_attention_start);

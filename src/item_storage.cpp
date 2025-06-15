@@ -3,6 +3,7 @@
 #include "throughput_counter.h"
 #include <cassert>
 #include <utility>
+#include <iostream>
 #include <vector>
 
 int Storage::size() const {

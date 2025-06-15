@@ -121,7 +121,7 @@ PagedDecoderLayer::PagedDecoderLayer(size_t n_batch, size_t n_vocab): emb_score_
 
 void PagedDecoderLayer::forward(const TensorFloat& batch_result, const TensorFloat& emb_table,
     const TensorFloat& wpe_table,
-    TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result) {
+    TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result, int i_decoder_round) {
 
-    launch_paged_attention_decoder(batch_result, emb_table, emb_score_, wpe_table, page_table, lengths, decoder_result);
+    launch_paged_attention_decoder_multi_rounds(batch_result, emb_table, emb_score_, wpe_table, page_table, lengths, decoder_result, i_decoder_round);
 }

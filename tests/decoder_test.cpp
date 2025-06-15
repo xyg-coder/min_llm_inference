@@ -130,14 +130,14 @@ TEST(DecoderTest, PagedAttentionDecoderKernelTest) {
         lengths_to_compare,
         decoder_result_to_compare);
     
-    launch_paged_attention_decoder(
+    launch_paged_attention_decoder_multi_rounds(
         paged_attention_batch_emb,
         emb_table_device,
         paged_attention_emb_score,
         wpe_table_device,
         wrapper.page_table,
         wrapper.lengths,
-        paged_attention_decoder_result);
+        paged_attention_decoder_result, 0);
     
     assert_page_table_close(
         (const float**)wrapper.page_table.data(), wrapper.inp_embedding.data(),
@@ -195,14 +195,14 @@ TEST(DecoderTest, PagedAttentionMaxLengthTest) {
         lengths_to_compare_device_host.first,
         decoder_result_to_compare);
     
-    launch_paged_attention_decoder(
+    launch_paged_attention_decoder_multi_rounds(
         paged_attention_batch_emb,
         emb_table_device,
         paged_attention_emb_score,
         wpe_table_device,
         wrapper.page_table,
         wrapper.lengths,
-        paged_attention_decoder_result);
+        paged_attention_decoder_result, 0);
     
     assert_page_table_close(
         (const float**)wrapper.page_table.data(), wrapper.inp_embedding.data(),

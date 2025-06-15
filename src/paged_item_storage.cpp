@@ -15,8 +15,10 @@ void allocate_or_free_memory_blocks_if_needed(
     PagedAttentionsManager& paged_attention_manager,
     MemoryBlockManager& memory_block_manager,
     ProcessingStorage& processing_storage,
-    ItemStorage& item_storage, const std::vector<int>& finished_indices) {
+    ItemStorage& item_storage, const std::vector<int>& finished_indices, int n_forward_rounds) {
 
+    // so we only need to allocate one block if needed
+    assert(n_forward_rounds > 0 && n_forward_rounds <= PAGE_BLOCK_SIZE);
     // 1. iterate over the finished indices and free them
     std::unordered_set<int> finished_indices_set(finished_indices.begin(), finished_indices.end());
     std::list<BatchIdMemoryBlocksPair>& used_blocks = paged_attention_manager.get_used_block_list();
@@ -35,7 +37,7 @@ void allocate_or_free_memory_blocks_if_needed(
         int batch_index = it->first;
         assert(processing_storage.batch_id_processing(batch_index));
         const IdTokensPair& token_pair = processing_storage.get_token(batch_index);
-        if (token_pair.second.size() == it->second.size() * PAGE_BLOCK_SIZE) {
+        if (token_pair.second.size() + n_forward_rounds > it->second.size() * PAGE_BLOCK_SIZE) {
             if (memory_block_manager.free_blocks_size() > 0) {
                 allocate_memory_block(memory_block_manager, paged_attention_manager, *it);
             } else if (std::next(it) == used_blocks.end()) {
@@ -62,8 +64,10 @@ std::vector<int> insert_new_items(
     TensorInt& lengths_device, TensorInt& lengths_host,
     TensorInt& new_items_indices_device, TensorInt& new_items_indices_host,
     ItemStorage& item_storage, ProcessingStorage& processing_storage,
-    MemoryBlockManager& memory_block_manager, PagedAttentionsManager& paged_attention_manager) {
-
+    MemoryBlockManager& memory_block_manager, PagedAttentionsManager& paged_attention_manager, int n_forward_rounds) {
+    
+    // so we only need to allocate one block if needed
+    assert(n_forward_rounds > 0 && n_forward_rounds <= PAGE_BLOCK_SIZE);
     int max_batch = inp_device.shape()[0];
     int n_sequence = inp_device.shape()[1];
     int* inp_data = inp_host.data();
@@ -84,7 +88,7 @@ std::vector<int> insert_new_items(
 
         if (memory_block_manager.free_blocks_size() >= DEFAULT_INIT_NUM_BLOCKS && item_storage.new_count() > 0 
             && memory_block_manager.free_blocks_size() 
-                >= ceil_div(item_storage.head_length() + 1, PAGE_BLOCK_SIZE)) {
+                >= ceil_div(item_storage.head_length() + n_forward_rounds, PAGE_BLOCK_SIZE)) {
             
             IdTokensPair popped = item_storage.pop_new_items(1)[0];
             assert(popped.second.size() + 1 <= n_sequence);
@@ -94,7 +98,7 @@ std::vector<int> insert_new_items(
                 inp_data + i * n_sequence);
             new_items_indices_data[insert_index++] = i;
             int n_blocks = std::max(
-                ceil_div(popped.second.size() + 1, PAGE_BLOCK_SIZE),
+                ceil_div(popped.second.size() + n_forward_rounds, PAGE_BLOCK_SIZE),
                 DEFAULT_INIT_NUM_BLOCKS);
             processing_storage.put(i, std::move(popped));
 

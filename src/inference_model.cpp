@@ -43,35 +43,40 @@ PagedAttentionInferenceModel::PagedAttentionInferenceModel(
     PagedAttentionLayer&& attention_layer,
     PagedEncoderLayer&& encoder_layer,
     PagedDecoderLayer&& decoder_layer,
-    size_t n_batch, size_t n_sequence, size_t emb_dim): paged_attention_layer_(std::move(attention_layer)),
+    size_t n_batch, size_t n_sequence, size_t emb_dim, int n_forward_rounds): paged_attention_layer_(std::move(attention_layer)),
         paged_encoder_layer_(std::move(encoder_layer)), paged_decoder_layer_(std::move(decoder_layer)),
         n_batch_(n_batch), n_sequence_(n_sequence), emb_dim_(emb_dim),
-        attention_result_(TensorFloat({n_batch, emb_dim}, DeviceType::DEVICE)) { }
+        attention_result_(TensorFloat({n_batch, emb_dim}, DeviceType::DEVICE)), n_forward_rounds_(n_forward_rounds) { }
 
 
 void PagedAttentionInferenceModel::forward(
     const TensorInt& inp, TensorInt& lengths, const TensorInt& new_item_indices, TensorInt& decoder_result, int n_new_items,
     const TensorFloat& emb_table, const TensorFloat& pos_emb_table, TensorFloatPoint& page_table) {
     
-    paged_encoder_layer_.forward(
-        emb_table,
-        pos_emb_table,
-        inp,
-        page_table,
-        lengths,
-        new_item_indices, n_new_items);
-    
-    paged_attention_layer_.forward(
-        page_table,
-        lengths,
-        new_item_indices,
-        attention_result_, n_new_items);
-    
-    paged_decoder_layer_.forward(
-        attention_result_,
-        emb_table,
-        pos_emb_table,
-        page_table,
-        lengths,
-        decoder_result);
+    for (int i = 0; i < n_forward_rounds_; ++i) {
+        if (i > 0) {
+            n_new_items = 0;
+        }
+        paged_encoder_layer_.forward(
+            emb_table,
+            pos_emb_table,
+            inp,
+            page_table,
+            lengths,
+            new_item_indices, n_new_items);
+        
+        paged_attention_layer_.forward(
+            page_table,
+            lengths,
+            new_item_indices,
+            attention_result_, n_new_items);
+        
+        paged_decoder_layer_.forward(
+            attention_result_,
+            emb_table,
+            pos_emb_table,
+            page_table,
+            lengths,
+            decoder_result, i);
+    }
 }

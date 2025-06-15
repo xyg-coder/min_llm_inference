@@ -111,16 +111,6 @@ void launch_decoder(
 }
 
 
-void launch_paged_attention_decoder(
-    const TensorFloat& batch_result, const TensorFloat& emb_table,
-    TensorFloat& emb_score,
-    const TensorFloat& wpe_table,
-    TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result) {
-
-    launch_paged_attention_decoder_multi_rounds(
-        batch_result, emb_table, emb_score, wpe_table, page_table, lengths, decoder_result, 0);
-}
-
 /**
  * emb_score: [n_batch, n_vocab]
  * decoder_result: [n_batch, n_decoder_results]

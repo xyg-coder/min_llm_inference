@@ -64,11 +64,11 @@ TEST(InferenceTest, PagedAttentionInferenceTest) {
             max_batches, emb_dims, n_sequence),
         PagedEncoderLayer(),
         PagedDecoderLayer(max_batches, n_vocab),
-        max_batches, n_sequence, emb_dims);
+        max_batches, n_sequence, emb_dims, 1);
     
     start_paged_attention_inference_engine(
         emb_table, pos_table, wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager,
-        model, max_batches, n_sequence);
+        model, max_batches, n_sequence, 1);
 
     ASSERT_EQ(wrapper.item_storage.finish_count(), max_batches * 2);
 }
@@ -114,12 +114,12 @@ TEST(InferenceTest, Compare2Inferences) {
             max_batches, emb_dims, n_sequence),
         PagedEncoderLayer(),
         PagedDecoderLayer(max_batches, n_vocab),
-        max_batches, n_sequence, emb_dims);
+        max_batches, n_sequence, emb_dims, 1);
     
     auto paged_attention_start = std::chrono::high_resolution_clock::now();
     start_paged_attention_inference_engine(
         emb_table, pos_table, wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager,
-        model, max_batches, n_sequence);
+        model, max_batches, n_sequence, 1);
     auto paged_attention_end = std::chrono::high_resolution_clock::now();
     auto paged_attention_duration = std::chrono::duration_cast<std::chrono::milliseconds>(paged_attention_end - paged_attention_start);
 
