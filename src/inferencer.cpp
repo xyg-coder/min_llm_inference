@@ -59,8 +59,8 @@ void start_paged_attention_inference_engine(const TensorFloat& emb_table, const 
         item_storage, processing_storage, memory_block_manager, paged_attention_manager, n_forward_rounds);
     nvtxRangePop();
     
-    TensorInt decoder_result_device({n_batch_size, 1}, DeviceType::DEVICE);
-    TensorInt decoder_result_host({n_batch_size, 1}, DeviceType::HOST);
+    TensorInt decoder_result_device({n_batch_size, n_forward_rounds}, DeviceType::DEVICE);
+    TensorInt decoder_result_host({n_batch_size, n_forward_rounds}, DeviceType::HOST);
 
     std::vector<int> finished_indices;
     while (!is_done(item_storage, processing_storage)) {
