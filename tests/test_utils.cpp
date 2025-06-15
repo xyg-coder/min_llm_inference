@@ -616,6 +616,7 @@ void decoder_host_kernel(
         lengths[i_batch] = cur_length + 1;
 
         if (cur_length + 1 >= n_sequence || max_index == EOF_TOKEN_ID) {
+            lengths[i_batch] = 0;
             continue;
         }
         float* inp_base = inp + i_batch * n_sequence * input_dim + cur_length * input_dim;

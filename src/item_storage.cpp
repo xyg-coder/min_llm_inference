@@ -97,9 +97,11 @@ std::vector<int> process_decoder_result(
     const TensorInt& decoder_result_device, TensorInt& decoder_result_host,
     ItemStorage& item_storage, ProcessingStorage& processing_storage, int n_sequence) {
     
-    assert(decoder_result_host.shape().size() == 2);
     int n_batch = decoder_result_host.shape()[0];
-    int n_decode_results = decoder_result_host.shape()[1];
+    int n_decode_results = 1;
+    if (decoder_result_host.shape().size() == 2) {
+        n_decode_results = decoder_result_host.shape()[1];
+    }
     decoder_result_host.copy_from(decoder_result_device);
     const int* decode_result_data = decoder_result_host.data();
     std::vector<int> finished_indices;
