@@ -59,6 +59,8 @@ The `get_latest_k_q_v_paged_attention` is talking the longest time.
 
 ### Putting page_pos to shared memory to avoid memory scatter visit
 
+[PR](https://github.com/xyg-coder/min_llm_inference/commit/14c48bf5b0a26d4166dd6abb95c973ecc4b38922)
+
 Before putting to shared:
 Total tokens: 194834, seconds: 18.861, throughput: 10330
 Compute throughput: 12%
