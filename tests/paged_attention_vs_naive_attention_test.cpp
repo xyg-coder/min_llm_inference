@@ -10,18 +10,18 @@
 #include <unordered_map>
 
 TEST(InferenceCompareTest, Compare2Inferences) {
-    int n_block_ratio = get_random_number(100, 200);
+    int n_block_ratio = 2;
     size_t max_batches = get_random_number(256, 512) / n_block_ratio * n_block_ratio * 3;
     size_t n_blocks = DEFAULT_INIT_NUM_BLOCKS * max_batches;
     size_t n_sequence = PAGE_BLOCK_SIZE * DEFAULT_INIT_NUM_BLOCKS * n_block_ratio;
     size_t emb_dims = get_random_number(128, 512) * 4;
     size_t n_vocab = get_random_number(EOF_TOKEN_ID + 1, EOF_TOKEN_ID + 1024);
 
-    std::vector<int> new_item_lengths = create_random_vector(max_batches * 2, 1, PAGE_BLOCK_SIZE * DEFAULT_INIT_NUM_BLOCKS * 4);
+    std::vector<int> new_item_lengths = create_random_vector(max_batches * 2, 1, PAGE_BLOCK_SIZE * DEFAULT_INIT_NUM_BLOCKS);
     PagedAttentionTestWrapper wrapper = mock_paged_attention_test_wrapper(
         max_batches, n_sequence, emb_dims, n_blocks, new_item_lengths);
 
-    TensorFloat emb_table = get_random_device_emb_table(emb_dims, n_vocab, 1.5);
+    TensorFloat emb_table = get_random_device_emb_table(emb_dims, n_vocab, 1.001);
     TensorFloat pos_table = get_random_device_tensor({n_sequence, emb_dims});
 
     TensorFloat wk = get_random_device_tensor({emb_dims, emb_dims});

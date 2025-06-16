@@ -27,6 +27,8 @@ __global__ void fill_new_k_v_cache_paged_attention(
     int batch_idx = new_batch_idx[blockIdx.z];
     int output_row_idx = blockIdx.y * TILE_SIZE + threadIdx.y;
     int output_col_idx = blockIdx.x * TILE_SIZE + threadIdx.x;
+    // so we can read page_pos only once. The whole block is using the same page block
+    assert(TILE_SIZE == PAGE_BLOCK_SIZE);
     // the max_i_sequence needed
     int cur_batch_length = lengths[batch_idx];
     // There is no thread in this block working, so we can exit
@@ -38,11 +40,15 @@ __global__ void fill_new_k_v_cache_paged_attention(
     int page_table_width = n_sequence / PAGE_BLOCK_SIZE;
     float** base_table = page_table + batch_idx * page_table_width;
 
-    float* page_pos = page_table[batch_idx * (n_sequence / PAGE_BLOCK_SIZE) + output_row_idx / PAGE_BLOCK_SIZE];
+    __shared__ float* page_pos[1];
+    if (threadIdx.y == 0 && threadIdx.x == 0) {
+        page_pos[0] = page_table[batch_idx * (n_sequence / PAGE_BLOCK_SIZE) + output_row_idx / PAGE_BLOCK_SIZE];
+    }
+    __syncthreads();
     for (int i = 0; i < emb_dim; i += TILE_SIZE) {
         if (output_row_idx < cur_batch_length && i + threadIdx.x < emb_dim) {
             inp_shared[threadIdx.y][threadIdx.x] = get_page_table_value(
-                page_pos, batch_idx, n_sequence, output_row_idx, emb_dim, PAGE_BLOCK_SIZE,
+                page_pos[0], batch_idx, n_sequence, output_row_idx, emb_dim, PAGE_BLOCK_SIZE,
                 i + threadIdx.x, INP_EMB_EMB_OFFSET);
         } else {
             inp_shared[threadIdx.y][threadIdx.x] = 0.0f;
@@ -73,9 +79,9 @@ __global__ void fill_new_k_v_cache_paged_attention(
         __syncthreads();
     }
     if (output_row_idx < cur_batch_length && output_col_idx < emb_dim) {
-        set_page_table_value(page_pos, batch_idx, n_sequence, output_row_idx, emb_dim,
+        set_page_table_value(page_pos[0], batch_idx, n_sequence, output_row_idx, emb_dim,
             PAGE_BLOCK_SIZE, output_col_idx, K_CACHE_EMB_OFFSET, k_result);
-        set_page_table_value(page_pos, batch_idx, n_sequence, output_row_idx, emb_dim,
+        set_page_table_value(page_pos[0], batch_idx, n_sequence, output_row_idx, emb_dim,
             PAGE_BLOCK_SIZE, output_col_idx, V_CACHE_EMB_OFFSET, v_result);
     }
 }
@@ -129,16 +135,20 @@ __global__ void get_latest_k_q_v_paged_attention(
     if (cur_length == 0) {
         return;
     }
+    __shared__ float* page_pos[1];
     int i_sequence = cur_length - 1;
     int output_col_idx = blockIdx.x * TILE_SIZE_SQUARE + threadIdx.x;
     float k_result = 0;
     float q_result = 0;
     float v_result = 0;
-    float* page_pos = page_table[i_batch * (n_sequence / PAGE_BLOCK_SIZE) + i_sequence / PAGE_BLOCK_SIZE];
+    if (threadIdx.x == 0) {
+        page_pos[0] = page_table[i_batch * (n_sequence / PAGE_BLOCK_SIZE) + i_sequence / PAGE_BLOCK_SIZE];
+    }
+    __syncthreads();
 
     for (int i = 0; i < emb_dim; i += TILE_SIZE_SQUARE) {
         if (i + threadIdx.x < emb_dim) {
-            inp_shared[threadIdx.x] = get_page_table_value(page_pos, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x, INP_EMB_EMB_OFFSET);
+            inp_shared[threadIdx.x] = get_page_table_value(page_pos[0], i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x, INP_EMB_EMB_OFFSET);
         } else {
             inp_shared[threadIdx.x] = 0.0f;
         }
@@ -154,8 +164,8 @@ __global__ void get_latest_k_q_v_paged_attention(
         __syncthreads();
     }
     if (output_col_idx < emb_dim) {
-        set_page_table_value(page_pos, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, K_CACHE_EMB_OFFSET, k_result);
-        set_page_table_value(page_pos, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, V_CACHE_EMB_OFFSET, v_result);
+        set_page_table_value(page_pos[0], i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, K_CACHE_EMB_OFFSET, k_result);
+        set_page_table_value(page_pos[0], i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, V_CACHE_EMB_OFFSET, v_result);
         q_output[i_batch * emb_dim + output_col_idx] = q_result;
     }
 }

@@ -57,6 +57,18 @@ make # build and run tests
 
 The `get_latest_k_q_v_paged_attention` is talking the longest time.
 
+### Putting page_pos to shared memory to avoid memory scatter visit
+
+Before putting to shared:
+Total tokens: 194834, seconds: 18.861, throughput: 10330
+Compute throughput: 12%
+
+After putting to shared:
+Total tokens: 194058, seconds: 8.708, throughput: 22285
+Compute throughput: 24%
+
+
 ## Plan
 
+* Benefit of using cuBlas to optimize the matrix calculation.
 * How to use multi-gpus to accelerate
