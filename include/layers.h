@@ -112,7 +112,8 @@ public:
     void forward(
         const TensorFloat& batch_result, const TensorFloat& emb_table,
         const TensorFloat& wpe_table,
-        TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result);
+        TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result,
+        int i_decoder_round);
 private:
     TensorFloat emb_score_;
 };

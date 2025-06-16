@@ -34,7 +34,7 @@ public:
         PagedAttentionLayer&&,
         PagedEncoderLayer&&,
         PagedDecoderLayer&&,
-        size_t n_batch, size_t n_sequence, size_t emb_dim);
+        size_t n_batch, size_t n_sequence, size_t emb_dim, int n_forward_rounds);
 
     void forward(
         const TensorInt& inp, TensorInt& lengths, const TensorInt& new_item_indices, TensorInt& decoder_result, int n_new_items,
@@ -47,4 +47,5 @@ private:
     size_t n_sequence_;
     size_t emb_dim_;
     TensorFloat attention_result_;
+    int n_forward_rounds_;
 };

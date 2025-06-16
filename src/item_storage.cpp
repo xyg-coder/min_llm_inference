@@ -1,8 +1,9 @@
-#include "items_storage.h"
+#include "item_storage.h"
 #include "constants.h"
 #include "throughput_counter.h"
 #include <cassert>
 #include <utility>
+#include <iostream>
 #include <vector>
 
 int Storage::size() const {
@@ -97,23 +98,40 @@ std::vector<int> process_decoder_result(
     const TensorInt& decoder_result_device, TensorInt& decoder_result_host,
     ItemStorage& item_storage, ProcessingStorage& processing_storage, int n_sequence) {
     
+    int n_batch = decoder_result_host.shape()[0];
+    int n_decode_results = 1;
+    if (decoder_result_host.shape().size() == 2) {
+        n_decode_results = decoder_result_host.shape()[1];
+    }
     decoder_result_host.copy_from(decoder_result_device);
     const int* decode_result_data = decoder_result_host.data();
     std::vector<int> finished_indices;
     int total_processed_tokens = 0;
-    for (int i = 0; i < decoder_result_host.shape()[0]; ++i) {
-        if (decode_result_data[i] == EMPTY_ROW_TOKEN_ID) {
-            assert(!processing_storage.batch_id_processing(i));
-            finished_indices.push_back(i);
-        } else {
-            append_token_to_id_string_pair(processing_storage.get_token(i), decode_result_data[i]);
-            total_processed_tokens++;
-            if (processing_storage.get_token(i).second.size() >= n_sequence
-                || decode_result_data[i] == EOF_TOKEN_ID) {
+    for (int i = 0; i < n_batch; ++i) {
+        bool empty = false;
+        bool finished = false;
+        for (int j = 0; j < n_decode_results; ++j) {
+            int decoder_result = decode_result_data[i * n_decode_results + j];
+            if (decoder_result == EMPTY_ROW_TOKEN_ID) {
+                empty = true;
+            } else {
+                append_token_to_id_string_pair(processing_storage.get_token(i), decoder_result);
+                total_processed_tokens++;
+                if (processing_storage.get_token(i).second.size() >= n_sequence
+                    || decoder_result == EOF_TOKEN_ID) {
 
-                finished_indices.push_back(i);
-                processing_storage.move_to_finished(i, item_storage);
+                    finished = true;
+                }
             }
+            if (finished || empty) {
+                break;
+            }
+        }
+        if (finished || empty) {
+            finished_indices.push_back(i);
+        }
+        if (finished) {
+            processing_storage.move_to_finished(i, item_storage);
         }
     }
     get_global_throughput_counter().add_record_if_recording(total_processed_tokens);

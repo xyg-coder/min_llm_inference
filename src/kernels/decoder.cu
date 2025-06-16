@@ -68,6 +68,9 @@ __global__ void decoder_kernel(
     if (threadIdx.x == 0) {
         decoder_result[i_batch] = max_index[0];
         lengths[i_batch] = cur_length + 1;
+        if (cur_length + 1 >= n_sequence || max_index[0] == EOF_TOKEN_ID) {
+            lengths[i_batch] = 0;
+        }
     }
 
 
@@ -110,7 +113,7 @@ void launch_decoder(
 
 /**
  * emb_score: [n_batch, n_vocab]
- * decoder_result: [n_batch]
+ * decoder_result: [n_batch, n_decoder_results]
  * lengths: [n_batch]
  * page_table: [n_batch, n_sequence / page_block_size]
  * wpe_table: [n_sequence, input_dim]
@@ -121,18 +124,19 @@ void launch_decoder(
  * 3. lengths += 1
  * 4. calculate the new embedding and save to inp
  */
-__global__ void paged_attention_decoder_kernel(
+__global__ void paged_attention_decoder_kernel_with_multi_decoder(
     const float* emb_score, int* decoder_result,
     int* lengths, float** page_table, const float* wpe_table,
     const float* emb_table,
-    int n_batch, int n_vocab, int n_sequence, int emb_dim, int page_block_size) {
+    int n_batch, int n_vocab, int n_sequence, int emb_dim, int page_block_size,
+    int n_decoder_results, int i_decoder) {
 
     int i_batch = blockIdx.y;
     int cur_length = lengths[i_batch];
     // cur_length == 0 means invalid row
     if (cur_length == 0) {
         if (threadIdx.x == 0) {
-            decoder_result[i_batch] = EMPTY_ROW_TOKEN_ID;
+            decoder_result[i_batch * n_decoder_results + i_decoder] = EMPTY_ROW_TOKEN_ID;
         }
         return;
     }
@@ -166,15 +170,19 @@ __global__ void paged_attention_decoder_kernel(
         __syncthreads();
     }
     if (threadIdx.x == 0) {
-        decoder_result[i_batch] = max_index[0];
+        decoder_result[i_batch * n_decoder_results + i_decoder] = max_index[0];
         lengths[i_batch] = cur_length + 1;
+        if (max_index[0] == EOF_TOKEN_ID || cur_length + 1 >= n_sequence) {
+            // next time we don't need to handle this
+            lengths[i_batch] = 0;
+        }
     }
 
 
     // 2. calculate the embedding. Every block handles one batch
     assert(emb_dim % 4 == 0);
     int embedding_dim_4 = emb_dim / 4;
-    if (idx >= embedding_dim_4 || cur_length >= n_sequence - 1 || max_index[0] == EOF_TOKEN_ID) {
+    if (idx >= embedding_dim_4 || cur_length + 1 >= n_sequence || max_index[0] == EOF_TOKEN_ID) {
         return;
     }
 
@@ -191,23 +199,26 @@ __global__ void paged_attention_decoder_kernel(
     }
 }
 
-
-void launch_paged_attention_decoder(
+void launch_paged_attention_decoder_multi_rounds(
     const TensorFloat& batch_result, const TensorFloat& emb_table,
     TensorFloat& emb_score,
     const TensorFloat& wpe_table,
-    TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result) {
+    TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result, int i_decoder) {
 
     int batch_size = batch_result.shape()[0];
     int emb_dim = batch_result.shape()[1];
     int n_vocab = emb_table.shape()[0];
     int n_sequence = wpe_table.shape()[0];
+    int n_decoder_results = 1;
+    if (decoder_result.shape().size() == 2) {
+        n_decoder_results = decoder_result.shape()[1];
+    }
 
     launch_gemm_transpose_kernel(
         batch_result.data(), emb_table.data(), emb_score.data(), 1, batch_size, n_vocab, emb_dim);
 
     dim3 gridDim(1, batch_size);
-    paged_attention_decoder_kernel<<<gridDim, BLOCK_DIM>>>(emb_score.data(), decoder_result.data(), lengths.data(),
-        page_table.data(), wpe_table.data(), emb_table.data(), batch_size, n_vocab, n_sequence, emb_dim, PAGE_BLOCK_SIZE);
+    paged_attention_decoder_kernel_with_multi_decoder<<<gridDim, BLOCK_DIM>>>(emb_score.data(), decoder_result.data(), lengths.data(),
+        page_table.data(), wpe_table.data(), emb_table.data(), batch_size, n_vocab, n_sequence, emb_dim, PAGE_BLOCK_SIZE, n_decoder_results, i_decoder);
     CUDA_CHECK_LAST();
 }

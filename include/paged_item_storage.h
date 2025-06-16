@@ -1,6 +1,6 @@
 #pragma once
 
-#include "items_storage.h"
+#include "item_storage.h"
 #include "tensor.hpp"
 #include <cstddef>
 #include <list>
@@ -47,11 +47,11 @@ private:
 void allocate_memory_block(MemoryBlockManager&, PagedAttentionsManager&, BatchIdMemoryBlocksPair&);
 
 void allocate_or_free_memory_blocks_if_needed(PagedAttentionsManager&, MemoryBlockManager&,
-    ProcessingStorage&, ItemStorage&, const std::vector<int>& finished_indices);
+    ProcessingStorage&, ItemStorage&, const std::vector<int>& finished_indices, int n_forward_rounds);
 
 std::vector<int> insert_new_items(
     TensorInt& inp_device, TensorInt& inp_host,
     TensorInt& lengths_device, TensorInt& lengths_host,
     TensorInt& new_items_indices_device, TensorInt& new_items_indices_host,
     ItemStorage& item_storage, ProcessingStorage& processing_storage,
-    MemoryBlockManager& memory_block_manager, PagedAttentionsManager& paged_attention_manager);
+    MemoryBlockManager& memory_block_manager, PagedAttentionsManager& paged_attention_manager, int n_forward_rounds);

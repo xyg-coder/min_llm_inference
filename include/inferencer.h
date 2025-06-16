@@ -1,7 +1,7 @@
 #pragma once
 
 #include "inference_model.h"
-#include "items_storage.h"
+#include "item_storage.h"
 #include "paged_item_storage.h"
 #include "tensor.hpp"
 
@@ -23,4 +23,4 @@ void start_inference_engine(const TensorFloat& emb_table, const TensorFloat& pos
 void start_paged_attention_inference_engine(const TensorFloat& emb_table, const TensorFloat& pos_table,
     ItemStorage& item_storage, ProcessingStorage& processing_storage,
     MemoryBlockManager& memory_block_manager, PagedAttentionsManager& paged_attention_manager,
-    PagedAttentionInferenceModel& inference_model, size_t n_batch_size, size_t n_sequence);
+    PagedAttentionInferenceModel& inference_model, size_t n_batch_size, size_t n_sequence, int n_forward_rounds);

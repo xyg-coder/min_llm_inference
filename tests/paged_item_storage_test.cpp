@@ -30,7 +30,7 @@ TEST(PagedItemStorageTest, InsertAllItemsTest) {
         inp_device_host.first, inp_device_host.second,
         lengths_device_host.first, lengths_device_host.second,
         new_item_indices_device_host.first, new_item_indices_device_host.second,
-        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager);
+        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager, 1);
 
     ASSERT_EQ(new_item_indices.size(), max_batches);
     for (int i = 0; i < new_item_indices.size(); ++i) {
@@ -71,7 +71,7 @@ TEST(PagedItemStorageTest, InsertNewItemsTest) {
         inp_device_host.first, inp_device_host.second,
         lengths_device_host.first, lengths_device_host.second,
         new_item_indices_device_host.first, new_item_indices_device_host.second,
-        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager);
+        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager, 1);
 
     ASSERT_EQ(new_item_indices.size(), max_batches - 1);
 
@@ -86,7 +86,7 @@ TEST(PagedItemStorageTest, InsertNewItemsTest) {
         inp_device_host.first, inp_device_host.second,
         lengths_device_host.first, lengths_device_host.second,
         new_item_indices_device_host.first, new_item_indices_device_host.second,
-        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager);
+        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager, 1);
 
     ASSERT_EQ(new_item_indices.size(), 1);
     ASSERT_EQ(new_item_indices[0], max_batches - 1);
@@ -128,7 +128,7 @@ TEST(PagedItemStorageTest, ReturnFreeBlocksTest) {
         inp_device_host.first, inp_device_host.second,
         lengths_device_host.first, lengths_device_host.second,
         new_item_indices_device_host.first, new_item_indices_device_host.second,
-        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager);
+        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager, 1);
 
     ASSERT_EQ(wrapper.memory_block_manager.free_blocks_size(), 0);
     int n_finishes = get_random_number(2, max_batches - 10);
@@ -146,14 +146,14 @@ TEST(PagedItemStorageTest, ReturnFreeBlocksTest) {
         wrapper.processing_storage, n_sequence);
     allocate_or_free_memory_blocks_if_needed(
         wrapper.paged_attention_manager, wrapper.memory_block_manager,
-        wrapper.processing_storage, wrapper.item_storage, finished_indices_result);
+        wrapper.processing_storage, wrapper.item_storage, finished_indices_result, 1);
     ASSERT_EQ(wrapper.memory_block_manager.free_blocks_size(), n_finishes * DEFAULT_INIT_NUM_BLOCKS);
     ASSERT_EQ(wrapper.item_storage.finish_count(), n_finishes);
     new_item_indices = insert_new_items(
         inp_device_host.first, inp_device_host.second,
         lengths_device_host.first, lengths_device_host.second,
         new_item_indices_device_host.first, new_item_indices_device_host.second,
-        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager);
+        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager, 1);
     ASSERT_EQ(new_item_indices.size(), n_finishes);
 }
 
@@ -179,7 +179,7 @@ TEST(PagedItemStorageTest, AllocateMoreBlocksTest) {
         inp_device_host.first, inp_device_host.second,
         lengths_device_host.first, lengths_device_host.second,
         new_item_indices_device_host.first, new_item_indices_device_host.second,
-        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager);
+        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager, 1);
 
     ASSERT_EQ(wrapper.memory_block_manager.free_blocks_size(), n_blocks - max_batches / 2 * DEFAULT_INIT_NUM_BLOCKS);
 
@@ -191,7 +191,7 @@ TEST(PagedItemStorageTest, AllocateMoreBlocksTest) {
         wrapper.processing_storage, n_sequence);
     allocate_or_free_memory_blocks_if_needed(
         wrapper.paged_attention_manager, wrapper.memory_block_manager,
-        wrapper.processing_storage, wrapper.item_storage, finished_indices_result);
+        wrapper.processing_storage, wrapper.item_storage, finished_indices_result, 1);
     ASSERT_EQ(finished_indices_result.size(), 0);
     ASSERT_EQ(wrapper.memory_block_manager.free_blocks_size(), n_blocks - max_batches / 2 * DEFAULT_INIT_NUM_BLOCKS - n_to_allocate);
 }
@@ -214,7 +214,7 @@ TEST(PagedItemStorageTest, FreeTheLastBlocksTest) {
         inp_device_host.first, inp_device_host.second,
         lengths_device_host.first, lengths_device_host.second,
         new_item_indices_device_host.first, new_item_indices_device_host.second,
-        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager);
+        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager, 1);
     ASSERT_EQ(wrapper.memory_block_manager.free_blocks_size(), 0);
 
     auto decoder_result_device_host = get_random_device_host_tensor_int(
@@ -225,7 +225,7 @@ TEST(PagedItemStorageTest, FreeTheLastBlocksTest) {
         wrapper.processing_storage, n_sequence);
     allocate_or_free_memory_blocks_if_needed(
         wrapper.paged_attention_manager, wrapper.memory_block_manager,
-        wrapper.processing_storage, wrapper.item_storage, finished_indices_result);
+        wrapper.processing_storage, wrapper.item_storage, finished_indices_result, 1);
     
     ASSERT_EQ(wrapper.memory_block_manager.free_blocks_size(), DEFAULT_INIT_NUM_BLOCKS);
     // the last item is freed
@@ -259,7 +259,7 @@ TEST(PagedItemStorageTest, FreeBlocks) {
         inp_device_host.first, inp_device_host.second,
         lengths_device_host.first, lengths_device_host.second,
         new_item_indices_device_host.first, new_item_indices_device_host.second,
-        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager);
+        wrapper.item_storage, wrapper.processing_storage, wrapper.memory_block_manager, wrapper.paged_attention_manager, 1);
     ASSERT_EQ(wrapper.memory_block_manager.free_blocks_size(), DEFAULT_INIT_NUM_BLOCKS);
 
     auto decoder_result_device_host = get_random_device_host_tensor_int(
@@ -270,7 +270,7 @@ TEST(PagedItemStorageTest, FreeBlocks) {
         wrapper.processing_storage, n_sequence);
     allocate_or_free_memory_blocks_if_needed(
         wrapper.paged_attention_manager, wrapper.memory_block_manager,
-        wrapper.processing_storage, wrapper.item_storage, finished_indices_result); 
+        wrapper.processing_storage, wrapper.item_storage, finished_indices_result, 1); 
     ASSERT_EQ(wrapper.memory_block_manager.free_blocks_size(), DEFAULT_INIT_NUM_BLOCKS * to_free + DEFAULT_INIT_NUM_BLOCKS - to_fill);
     // the last item is freed
     ASSERT_EQ(wrapper.item_storage.new_count(), to_free);
