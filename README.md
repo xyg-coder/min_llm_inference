@@ -55,19 +55,8 @@ make # build and run tests
 
 `./build/to_profile`
 
-### Non-pinned memory
-
-Total tokens: 197013, seconds: 18.812, throughput: 10472.7
-
-In `process_decoder_result`, `copy_from` takes 91ms.
-
-### Pinned memory
-
-Total tokens: 196684, seconds: 18.987, throughput: 10358.9
-
-In `process_decoder_result`, `copy_from` takes 91ms.
+The `get_latest_k_q_v_paged_attention` is talking the longest time.
 
 ## Plan
 
-* `decoder_result` should be larger. So one time, we can clone much larger. And this can make insert_new less called.
 * How to use multi-gpus to accelerate
