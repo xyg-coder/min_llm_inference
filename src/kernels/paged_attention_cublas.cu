@@ -4,16 +4,65 @@
 #include "kernels/self_attention_inference_optimized.h"
 #include <cassert>
 #include <cublas_v2.h>
+#include "kernels/paged_attention.h"
 
-
+/**
+ * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
+ * lengths: [n_batch]
+ * latest_embs: [n_batch, embs]
+ */
 __global__ void get_latest_batch_embs(
     const float** page_table, const int* lengths,
     float* latest_embs,
     int n_batch, int n_sequence, int emb_dim) {
 
+    int i_batch = blockIdx.y;
+    int cur_length = lengths[i_batch];
+    if (cur_length == 0) {
+        return;
+    }
+    int i_sequence = cur_length - 1;
+    int i_dim = blockIdx.x * blockDim.x + threadIdx.x;
+
+    __shared__ const float* page_pos;
+    if (threadIdx.x == 0) {
+        page_pos = page_table[i_batch * (n_sequence / PAGE_BLOCK_SIZE) + i_sequence / PAGE_BLOCK_SIZE];
+    }
+    __syncthreads();
+    if (i_dim < emb_dim) {
+        latest_embs[i_batch * emb_dim + i_dim] = get_page_table_value(page_pos, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i_dim, INP_EMB_EMB_OFFSET);
+    }
 }
 
-__global__ void save_to_page_table() {}
+/**
+ * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
+ * lengths: [n_batch]
+ * latest_k, latest_v: [n_batch, embs]
+ */
+__global__ void save_to_page_table(
+    float** page_table, const int* lengths, 
+    const float* latest_k, const float* latest_v,
+    int n_batch, int n_sequence, int emb_dim) {
+    
+    int i_batch = blockIdx.y;
+    int cur_length = lengths[i_batch];
+    if (cur_length == 0) {
+        return;
+    }
+    int i_sequence = cur_length - 1;
+    int i_dim = blockIdx.x * blockDim.x + threadIdx.x;
+
+    __shared__ float* page_pos;
+    if (threadIdx.x == 0) {
+        page_pos = page_table[i_batch * (n_sequence / PAGE_BLOCK_SIZE) + i_sequence / PAGE_BLOCK_SIZE];
+    }
+    __syncthreads();
+    if (i_dim < emb_dim) {
+        set_page_table_value(page_pos, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i_dim, K_CACHE_EMB_OFFSET, latest_k[i_batch * emb_dim + i_dim]);
+        set_page_table_value(page_pos, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i_dim, V_CACHE_EMB_OFFSET, latest_v[i_batch * emb_dim + i_dim]);
+    }
+
+}
 
 /**
  * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
@@ -32,13 +81,17 @@ void launch_get_latest_k_q_v_paged_attention_cublas(
     int n_batch = page_table.shape()[0];
     int emb_dim = wq.shape()[0];
     
-    get_latest_batch_embs(const float **page_table, const int *lengths, float *latest_embs, int n_batch, int n_sequence, int emb_dim);
+    dim3 gridDim(ceil_div(emb_dim, TILE_SIZE_SQUARE), n_batch);
+    get_latest_batch_embs<<<gridDim, TILE_SIZE_SQUARE>>>((const float**)page_table.data(), lengths.data(), latest_emb.data(), n_batch, n_sequence, emb_dim);
+    CUDA_CHECK_LAST();
+
     float alpha = 1.0f, beta = 0.0f;
     cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_T, n_batch, emb_dim, emb_dim, &alpha, latest_emb.data(),
         n_batch, wk.data(), n_batch, &beta, q_output.data(), n_batch);
     cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_T, n_batch, emb_dim, emb_dim, &alpha, latest_emb.data(),
         n_batch, wv.data(), n_batch, &beta, temp_placeholder.data(), n_batch);
-    save_to_page_table();
+    save_to_page_table<<<gridDim, TILE_SIZE_SQUARE>>>(page_table.data(), lengths.data(), q_output.data(), temp_placeholder.data(), n_batch, n_sequence, emb_dim);
+    CUDA_CHECK_LAST();
     cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_T, n_batch, emb_dim, emb_dim, &alpha, latest_emb.data(),
         n_batch, wq.data(), n_batch, &beta, q_output.data(), n_batch);
 }
@@ -63,12 +116,12 @@ void paged_attention_with_cublas(
     const TensorFloat& wv,
     const TensorInt& new_batch_idx,
     TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result,
-    TensorFloat& latest_emb,
+    TensorFloat& latest_emb, TensorFloat& temp_placeholder,
     int n_new_items, int n_sequence, cublasHandle_t& handle) {
 
     launch_fill_new_k_v_cache_paged_attention(page_table, new_batch_idx, lengths, wk, wv, n_new_items, n_sequence);
 
-    launch_get_latest_k_q_v_paged_attention_cublas(page_table, lengths, wk, wq, wv, q_output, n_sequence);
+    launch_get_latest_k_q_v_paged_attention_cublas(page_table, lengths, latest_emb, wk, wq, wv, q_output, temp_placeholder, handle, n_sequence);
 
     launch_qkt_paged_attention(q_output, page_table, lengths, qkt_output);
 
