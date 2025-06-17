@@ -190,7 +190,11 @@ __global__ void paged_attention_decoder_kernel_with_multi_decoder(
     const float4* wpe_4 = reinterpret_cast<const float4*>(wpe_table + cur_length * emb_dim);
     assert(n_sequence % page_block_size == 0);
     int width = n_sequence / page_block_size;
-    float* page_pos = page_table[i_batch * width + cur_length / page_block_size];
+    __shared__ float* page_pos;
+    if (threadIdx.x == 0) {
+        page_pos = page_table[i_batch * width + cur_length / page_block_size];
+    }
+    __syncthreads();
     float* emb_pos = page_pos + (cur_length % page_block_size) * emb_dim * 3 + emb_dim * INP_EMB_EMB_OFFSET;
 
     float4* output_4 = reinterpret_cast<float4*>(emb_pos);
