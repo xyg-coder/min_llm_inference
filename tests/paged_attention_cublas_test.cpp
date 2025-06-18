@@ -44,10 +44,10 @@ TEST(PagedAttentionCublasTest, LatestKtQVTest) {
     assert_page_table_close(
         (const float**)device_tensors.page_table.data(), device_tensors.v_cache.data(),
         device_tensors.lengths.data(), n_batch, n_sequence, V_CACHE_EMB_OFFSET, emb_dim);
-    cublasDestroy(handle); 
+    cublasDestroy(handle);
 }
 
-TEST(PagedAttentionKernelTest, InferenceOptimizedSelfAttentionTest) {
+TEST(PagedAttentionCublasTest, InferenceOptimizedSelfAttentionTest) {
     cublasHandle_t handle;
     cublasCreate(&handle);
     size_t n_batch = get_random_number(128, 256);
@@ -111,7 +111,7 @@ TEST(PagedAttentionKernelTest, InferenceOptimizedSelfAttentionTest) {
     cublasDestroy(handle); 
 }
 
-TEST(PagedAttentionKernelTest, InferenceOptimizedSelfAttentionZeroLengthTest) {
+TEST(PagedAttentionCublasTest, InferenceOptimizedSelfAttentionZeroLengthTest) {
     cublasHandle_t handle;
     cublasCreate(&handle);
     size_t n_batch = get_random_number(128, 256);

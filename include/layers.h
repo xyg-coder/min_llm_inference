@@ -2,6 +2,7 @@
 
 #include "tensor.hpp"
 #include "utils.h"
+#include <cublas_v2.h>
 #include <optional>
 
 
@@ -36,7 +37,7 @@ private:
 class PagedAttentionLayer : public NonCopyableNonClonable {
 public:
     PagedAttentionLayer(TensorFloat&& wk, TensorFloat&& wq, TensorFloat&& wv,
-        size_t n_batch, size_t input_dim, size_t n_sequence);
+        size_t n_batch, size_t emb_dim, size_t n_sequence);
     void forward(TensorFloatPoint& page_table, const TensorInt& lengths,
         const TensorInt& new_batch_idx, TensorFloat& attention_result, int n_new_items);
 private:
@@ -47,6 +48,22 @@ private:
     TensorFloat qkt_output_;
 };
 
+class PagedAttentionCublasLayer : public NonCopyableNonClonable {
+public:
+    PagedAttentionCublasLayer(TensorFloat&& wk, TensorFloat&& wq, TensorFloat&& wv,
+        size_t n_batch, size_t emb_dim, size_t n_sequence);
+    void forward(TensorFloatPoint& page_table, const TensorInt& lengths,
+        const TensorInt& new_batch_idx, TensorFloat& attention_result, int n_new_items,
+        cublasHandle_t& handle);
+private:
+    TensorFloat wk_;
+    TensorFloat wq_;
+    TensorFloat wv_;
+    TensorFloat q_output_;
+    TensorFloat qkt_output_;
+    TensorFloat latest_emb_;
+    TensorFloat temp_placeholder_;
+};
 
 /**
  * emb_table: [n_vocab, inputDim]

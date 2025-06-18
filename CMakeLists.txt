@@ -70,6 +70,7 @@ target_include_directories(min_llm_inference
 )
 
 add_executable(to_profile ${TESTS_DIR}/paged_for_profile.cpp ${TESTS_DIR}/test_utils.cpp)
+add_executable(cublas_to_profile ${TESTS_DIR}/paged_cubluas_for_profile.cpp ${TESTS_DIR}/test_utils.cpp)
 
 # CUDA Toolkit typically installs NVTX in a standard location
 find_path(NVTX_INCLUDE_DIR nvtx3/nvToolsExt.h
@@ -81,6 +82,8 @@ find_library(NVTX_LIBRARY nvToolsExt
 if (NVTX_INCLUDE_DIR AND NVTX_LIBRARY)
     target_include_directories(to_profile PRIVATE ${TESTS_DIR}/include ${NVTX_INCLUDE_DIR})
     target_link_libraries(to_profile PRIVATE ${NVTX_LIBRARY} min_llm_inference)
+    target_include_directories(cublas_to_profile PRIVATE ${TESTS_DIR}/include ${NVTX_INCLUDE_DIR})
+    target_link_libraries(cublas_to_profile PRIVATE ${NVTX_LIBRARY} min_llm_inference)
 else()
     message(FATAL_ERROR "NVTX not found! Make sure CUDA Toolkit is installed.")
 endif()

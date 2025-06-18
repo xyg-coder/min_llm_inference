@@ -73,12 +73,30 @@ PagedAttentionLayer::PagedAttentionLayer(TensorFloat&& wk, TensorFloat&& wq, Ten
     qkt_output_({n_batch, n_sequence}, DeviceType::DEVICE) { }
 
 
+PagedAttentionCublasLayer::PagedAttentionCublasLayer(TensorFloat&& wk, TensorFloat&& wq, TensorFloat&& wv,
+    size_t n_batch, size_t emb_dim, size_t n_sequence): wk_(std::move(wk)), wq_(std::move(wq)), wv_(std::move(wv)),
+    q_output_({n_batch, emb_dim}, DeviceType::DEVICE),
+    qkt_output_({n_batch, n_sequence}, DeviceType::DEVICE),
+    latest_emb_({n_batch, emb_dim}, DeviceType::DEVICE),
+    temp_placeholder_({n_batch, emb_dim}, DeviceType::DEVICE) { }
+
+
 void PagedAttentionLayer::forward(TensorFloatPoint& page_table, const TensorInt& lengths,
         const TensorInt& new_batch_idx, TensorFloat& attention_result, int n_new_items) {
 
     int n_sequence = qkt_output_.shape()[1];
     paged_attention(page_table, lengths, wk_, wq_, wv_, new_batch_idx, q_output_, qkt_output_,
         attention_result, n_new_items, n_sequence);
+}
+
+void PagedAttentionCublasLayer::forward(TensorFloatPoint& page_table, const TensorInt& lengths,
+    const TensorInt& new_batch_idx, TensorFloat& attention_result, int n_new_items,
+    cublasHandle_t& handle) {
+
+    int n_sequence = qkt_output_.shape()[1];
+    paged_attention_with_cublas(
+        page_table, lengths, wk_, wq_, wv_, new_batch_idx, q_output_, qkt_output_, attention_result, latest_emb_, temp_placeholder_,
+        n_new_items, n_sequence, handle);
 }
 
 

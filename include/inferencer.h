@@ -24,3 +24,9 @@ void start_paged_attention_inference_engine(const TensorFloat& emb_table, const 
     ItemStorage& item_storage, ProcessingStorage& processing_storage,
     MemoryBlockManager& memory_block_manager, PagedAttentionsManager& paged_attention_manager,
     PagedAttentionInferenceModel& inference_model, size_t n_batch_size, size_t n_sequence, int n_forward_rounds);
+
+
+void start_paged_attention_cublas_inference_engine(const TensorFloat& emb_table, const TensorFloat& pos_table,
+    ItemStorage& item_storage, ProcessingStorage& processing_storage,
+    MemoryBlockManager& memory_block_manager, PagedAttentionsManager& paged_attention_manager,
+    PagedAttentionCublasInferenceModel& inference_model, size_t n_batch_size, size_t n_sequence, int n_forward_rounds);

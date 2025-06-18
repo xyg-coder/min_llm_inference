@@ -83,3 +83,51 @@ void start_paged_attention_inference_engine(const TensorFloat& emb_table, const 
     }
     get_global_throughput_counter().print_throughput();
 }
+
+void start_paged_attention_cublas_inference_engine(const TensorFloat& emb_table, const TensorFloat& pos_table,
+    ItemStorage& item_storage, ProcessingStorage& processing_storage,
+    MemoryBlockManager& memory_block_manager, PagedAttentionsManager& paged_attention_manager,
+    PagedAttentionCublasInferenceModel& inference_model, size_t n_batch_size, size_t n_sequence, int n_forward_rounds) {
+
+    TensorInt inp_device({n_batch_size, n_sequence}, DeviceType::DEVICE);
+    TensorInt inp_host({n_batch_size, n_sequence}, DeviceType::HOST);
+    TensorInt lengths_device({n_batch_size}, DeviceType::DEVICE);
+    TensorInt lengths_host({n_batch_size}, DeviceType::HOST);
+    TensorInt new_items_indices_device({n_batch_size}, DeviceType::DEVICE);
+    TensorInt new_items_indices_host({n_batch_size}, DeviceType::HOST);
+
+    cublasHandle_t handle;
+    cublasCreate(&handle);
+
+    nvtxRangePushA("insert_new_items");
+    get_global_throughput_counter().start_record();
+    std::vector<int> new_item_indices = insert_new_items(
+        inp_device, inp_host, lengths_device, lengths_host, new_items_indices_device, new_items_indices_host,
+        item_storage, processing_storage, memory_block_manager, paged_attention_manager, n_forward_rounds);
+    nvtxRangePop();
+    
+    TensorInt decoder_result_device({n_batch_size, n_forward_rounds}, DeviceType::DEVICE);
+    TensorInt decoder_result_host({n_batch_size, n_forward_rounds}, DeviceType::HOST);
+
+    std::vector<int> finished_indices;
+    while (!is_done(item_storage, processing_storage)) {
+        nvtxRangePushA("forward");
+        inference_model.forward(inp_device, lengths_device, new_items_indices_device, decoder_result_device,
+            new_item_indices.size(), emb_table, pos_table, paged_attention_manager.get_page_table_device(), handle);
+        nvtxRangePop();
+        nvtxRangePushA("process_decoder_result");
+        finished_indices = process_decoder_result(
+            decoder_result_device, decoder_result_host, item_storage, processing_storage, n_sequence);
+        nvtxRangePop();
+        nvtxRangePushA("allocate_or_free_memory_blocks_if_needed");
+        allocate_or_free_memory_blocks_if_needed(paged_attention_manager, memory_block_manager, processing_storage, item_storage, finished_indices, n_forward_rounds);
+        nvtxRangePop();
+        nvtxRangePushA("insert_new_items");
+        new_item_indices = insert_new_items(
+            inp_device, inp_host, lengths_device, lengths_host, new_items_indices_device, new_items_indices_host,
+            item_storage, processing_storage, memory_block_manager, paged_attention_manager, n_forward_rounds);
+        nvtxRangePop();
+    }
+    get_global_throughput_counter().print_throughput();
+    cublasDestroy(handle);
+}
