@@ -2,6 +2,13 @@
 #include <cstdio>
 #include <cuda_runtime.h>
 
+#define CHECK_CUBLAS(call) do { \
+    cublasStatus_t status = (call); \
+    if (status != CUBLAS_STATUS_SUCCESS) { \
+        printf("cuBLAS error %d at line %d\n", status, __LINE__); exit(1); \
+    } \
+} while (0)
+
 #ifdef USE_SYNC_CUDA_CHECK
 #define CUDA_CHECK_LAST()                                            \
     do {                                                            \

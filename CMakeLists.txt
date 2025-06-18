@@ -50,6 +50,12 @@ add_library(min_llm_inference
     ${ALL_SOURCES}
 )
 
+target_link_libraries(min_llm_inference
+    PUBLIC
+        CUDA::cublas
+)
+
+
 # Set CUDA properties
 set_target_properties(min_llm_inference PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
