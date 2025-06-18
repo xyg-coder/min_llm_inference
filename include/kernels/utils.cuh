@@ -26,6 +26,9 @@ void launch_print_kernel(const float* data, int size);
 
 void assert_float_kernel_close(const float* data1, const float* data2, int size, float threshold=1e-3);
 
+// ignore the batches whose length is 0
+void assert_emb_kernel_close(const float* emb1, const float* emb2, const int*lengths, int n_batch, int emb_dim, float threshold=1e-3);
+
 void assert_int_kernel_close(const int* data1, const int* data2, int size);
 
 // emb_offset==0: inp_emb

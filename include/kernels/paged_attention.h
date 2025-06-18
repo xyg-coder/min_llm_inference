@@ -60,4 +60,4 @@ void launch_get_latest_k_q_v_paged_attention_cublas(
     TensorFloat& latest_emb,
     const TensorFloat& wk, const TensorFloat& wq,
     const TensorFloat& wv, TensorFloat& q_output, TensorFloat& temp_placeholder,
-    cublasHandle_t& handle, int n_sequence, const TensorFloat& inp_embedding_to_check);
+    cublasHandle_t& handle, int n_sequence);
