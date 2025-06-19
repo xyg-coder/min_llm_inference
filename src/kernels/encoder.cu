@@ -121,7 +121,11 @@ __global__ void paged_attention_encoder(
     const float4* emb_table_start = reinterpret_cast<const float4*>(emb_table + token_id * embedding_dim);
     const float4* wpe_table_start = reinterpret_cast<const float4*>(wpe + i_sequence * embedding_dim);
     int width = n_sequence / page_block_size;
-    float* page_pos = page_table[i_batch * width + i_sequence / page_block_size];
+    __shared__ float* page_pos;
+    if (threadIdx.x == 0) {
+        page_pos = page_table[i_batch * width + i_sequence / page_block_size];
+    }
+    __syncthreads();
     float* emb_pos = page_pos + (i_sequence % page_block_size) * embedding_dim * 3 + embedding_dim * INP_EMB_EMB_OFFSET;
     float4* output_4 = reinterpret_cast<float4*>(emb_pos);
     output_4[i_dim] = float4_add(emb_table_start[i_dim], wpe_table_start[i_dim]);

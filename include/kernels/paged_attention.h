@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tensor.hpp"
+#include <cublas_v2.h>
 
 /**
  * inp_embedding: [n_batch, n_sequence / PAGE_BLOCK_SIZE], each element is one float*
@@ -40,3 +41,23 @@ void launch_qkt_paged_attention(
 void launch_softmax_v_paged_attention(
     const TensorFloat& softmax_result, const TensorFloatPoint& page_table, TensorFloat& attention_result,
     const TensorInt& lengths);
+
+
+void paged_attention_with_cublas(
+    TensorFloatPoint& page_table,
+    const TensorInt& lengths,
+    const TensorFloat& wk,
+    const TensorFloat& wq,
+    const TensorFloat& wv,
+    const TensorInt& new_batch_idx,
+    TensorFloat& q_output, TensorFloat& qkt_output, TensorFloat& attention_result,
+    TensorFloat& latest_emb, TensorFloat& temp_placeholder,
+    int n_new_items, int n_sequence, cublasHandle_t& handle);
+
+
+void launch_get_latest_k_q_v_paged_attention_cublas(
+    TensorFloatPoint& page_table, const TensorInt& lengths,
+    TensorFloat& latest_emb,
+    const TensorFloat& wk, const TensorFloat& wq,
+    const TensorFloat& wv, TensorFloat& q_output, TensorFloat& temp_placeholder,
+    cublasHandle_t& handle, int n_sequence);

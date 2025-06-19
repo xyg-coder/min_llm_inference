@@ -2,6 +2,13 @@
 #include <cstdio>
 #include <cuda_runtime.h>
 
+#define CHECK_CUBLAS(call) do { \
+    cublasStatus_t status = (call); \
+    if (status != CUBLAS_STATUS_SUCCESS) { \
+        printf("cuBLAS error %d at line %d\n", status, __LINE__); exit(1); \
+    } \
+} while (0)
+
 #ifdef USE_SYNC_CUDA_CHECK
 #define CUDA_CHECK_LAST()                                            \
     do {                                                            \
@@ -33,7 +40,6 @@ __device__ __inline__ float get_page_table_value(
 __device__ __inline__ float get_page_table_value(
     const float* page_pos, int i_batch, int n_sequence, int i_sequence, int emb_dim, int page_block_size, int i_dim, int emb_offset) {
     
-    int page_table_width = n_sequence / page_block_size;
     return page_pos[(i_sequence % page_block_size) * emb_dim * 3 + emb_offset * emb_dim + i_dim];
 }
 
@@ -50,7 +56,6 @@ __device__ __inline__ void set_page_table_value(
     float* page_pos, int i_batch, int n_sequence, int i_sequence, int emb_dim, int page_block_size, int i_dim, int emb_offset,
     float value) {
     
-    int page_table_width = n_sequence / page_block_size;
     page_pos[(i_sequence % page_block_size) * emb_dim * 3 + emb_dim * emb_offset + i_dim] = value;
 }
 
@@ -67,7 +72,6 @@ __device__ __inline__ void set_page_table_value_float4(
     float4* page_pos, int i_batch, int n_sequence, int i_sequence, int emb_dim_4, int page_block_size, int i_dim_4, int emb_offset,
     float4 value) {
 
-    int page_table_width = n_sequence / page_block_size;
     page_pos[(i_sequence % page_block_size) * emb_dim_4 * 3 + emb_dim_4 * emb_offset + i_dim_4] = value;
 }
 

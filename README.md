@@ -66,11 +66,12 @@ Total tokens: 194834, seconds: 18.861, throughput: 10330
 Compute throughput: 12%
 
 After putting to shared:
-Total tokens: 194058, seconds: 8.708, throughput: 22285
+Total tokens: 197136, seconds: 8.761, throughput: 22501.5
 Compute throughput: 24%
 
+Use cublas inside the paged attention:
+Total tokens: 196539, seconds: 2.314, throughput: 84934.7
 
 ## Plan
 
-* Benefit of using cuBlas to optimize the matrix calculation.
 * How to use multi-gpus to accelerate

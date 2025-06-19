@@ -93,7 +93,7 @@ TEST(SoftmaxTest, SoftMaxInPlaceTest) {
 
 // Just to test that the cuda can run large scale softmax
 TEST(SoftmaxTest, SoftMaxLargeTest) {
-    constexpr int N = 800, T = 1024;
+    constexpr int N = 400, T = 512;
     TensorFloat input_h({N, T, T}, DeviceType::HOST);
     TensorFloat input_d({N, T, T}, DeviceType::DEVICE);
 

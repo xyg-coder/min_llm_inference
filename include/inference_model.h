@@ -49,3 +49,26 @@ private:
     TensorFloat attention_result_;
     int n_forward_rounds_;
 };
+
+
+class PagedAttentionCublasInferenceModel : public NonCopyableNonClonable {
+public:
+    PagedAttentionCublasInferenceModel(
+        PagedAttentionCublasLayer&&,
+        PagedEncoderLayer&&,
+        PagedCublasDecoderLayer&&,
+        size_t n_batch, size_t n_sequence, size_t emb_dim, int n_forward_rounds);
+
+    void forward(
+        const TensorInt& inp, TensorInt& lengths, const TensorInt& new_item_indices, TensorInt& decoder_result, int n_new_items,
+        const TensorFloat& emb_table, const TensorFloat& pos_emb_table, TensorFloatPoint& page_table, cublasHandle_t handle);
+private:
+    PagedAttentionCublasLayer paged_attention_layer_;
+    PagedEncoderLayer paged_encoder_layer_;
+    PagedCublasDecoderLayer paged_decoder_layer_;
+    size_t n_batch_;
+    size_t n_sequence_;
+    size_t emb_dim_;
+    TensorFloat attention_result_;
+    int n_forward_rounds_;
+};

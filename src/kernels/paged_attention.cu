@@ -29,26 +29,26 @@ __global__ void fill_new_k_v_cache_paged_attention(
     int output_col_idx = blockIdx.x * TILE_SIZE + threadIdx.x;
     // so we can read page_pos only once. The whole block is using the same page block
     assert(TILE_SIZE == PAGE_BLOCK_SIZE);
-    // the max_i_sequence needed
-    int cur_batch_length = lengths[batch_idx];
     // There is no thread in this block working, so we can exit
-    if (blockIdx.y * TILE_SIZE >= cur_batch_length) {
-        return;
-    }
     float k_result = 0;
     float v_result = 0;
     int page_table_width = n_sequence / PAGE_BLOCK_SIZE;
     float** base_table = page_table + batch_idx * page_table_width;
 
-    __shared__ float* page_pos[1];
+    __shared__ float* page_pos;
+    __shared__ int cur_batch_length;
     if (threadIdx.y == 0 && threadIdx.x == 0) {
-        page_pos[0] = page_table[batch_idx * (n_sequence / PAGE_BLOCK_SIZE) + output_row_idx / PAGE_BLOCK_SIZE];
+        page_pos = page_table[batch_idx * (n_sequence / PAGE_BLOCK_SIZE) + output_row_idx / PAGE_BLOCK_SIZE];
+        cur_batch_length = lengths[batch_idx];
     }
     __syncthreads();
+    if (blockIdx.y * TILE_SIZE >= cur_batch_length) {
+        return;
+    }
     for (int i = 0; i < emb_dim; i += TILE_SIZE) {
         if (output_row_idx < cur_batch_length && i + threadIdx.x < emb_dim) {
             inp_shared[threadIdx.y][threadIdx.x] = get_page_table_value(
-                page_pos[0], batch_idx, n_sequence, output_row_idx, emb_dim, PAGE_BLOCK_SIZE,
+                page_pos, batch_idx, n_sequence, output_row_idx, emb_dim, PAGE_BLOCK_SIZE,
                 i + threadIdx.x, INP_EMB_EMB_OFFSET);
         } else {
             inp_shared[threadIdx.y][threadIdx.x] = 0.0f;
@@ -79,9 +79,9 @@ __global__ void fill_new_k_v_cache_paged_attention(
         __syncthreads();
     }
     if (output_row_idx < cur_batch_length && output_col_idx < emb_dim) {
-        set_page_table_value(page_pos[0], batch_idx, n_sequence, output_row_idx, emb_dim,
+        set_page_table_value(page_pos, batch_idx, n_sequence, output_row_idx, emb_dim,
             PAGE_BLOCK_SIZE, output_col_idx, K_CACHE_EMB_OFFSET, k_result);
-        set_page_table_value(page_pos[0], batch_idx, n_sequence, output_row_idx, emb_dim,
+        set_page_table_value(page_pos, batch_idx, n_sequence, output_row_idx, emb_dim,
             PAGE_BLOCK_SIZE, output_col_idx, V_CACHE_EMB_OFFSET, v_result);
     }
 }
@@ -130,25 +130,34 @@ __global__ void get_latest_k_q_v_paged_attention(
     int n_batch, int n_sequence, int emb_dim) {
     __shared__ float inp_shared[TILE_SIZE_SQUARE];
     int i_batch = blockIdx.y;
-    int cur_length = lengths[i_batch];
-    // cur_length == 0 means empty row
-    if (cur_length == 0) {
-        return;
-    }
-    __shared__ float* page_pos[1];
-    int i_sequence = cur_length - 1;
+    __shared__ float* page_pos;
+    __shared__ int cur_length;
+    
     int output_col_idx = blockIdx.x * TILE_SIZE_SQUARE + threadIdx.x;
     float k_result = 0;
     float q_result = 0;
     float v_result = 0;
     if (threadIdx.x == 0) {
-        page_pos[0] = page_table[i_batch * (n_sequence / PAGE_BLOCK_SIZE) + i_sequence / PAGE_BLOCK_SIZE];
+        cur_length = lengths[i_batch];
     }
     __syncthreads();
+    if (threadIdx.x == 0) {
+        // The lengths access are more predictable. So the gains is much less than putting page_table access using the shared_memory.
+        cur_length = lengths[i_batch];
+        if (cur_length > 0) {
+            page_pos = page_table[i_batch * (n_sequence / PAGE_BLOCK_SIZE) + (cur_length - 1) / PAGE_BLOCK_SIZE];
+        }
+    }
+    __syncthreads();
+    // cur_length == 0 means empty row
+    if (cur_length == 0) {
+        return;
+    }
+    int i_sequence = cur_length - 1;
 
     for (int i = 0; i < emb_dim; i += TILE_SIZE_SQUARE) {
         if (i + threadIdx.x < emb_dim) {
-            inp_shared[threadIdx.x] = get_page_table_value(page_pos[0], i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x, INP_EMB_EMB_OFFSET);
+            inp_shared[threadIdx.x] = get_page_table_value(page_pos, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x, INP_EMB_EMB_OFFSET);
         } else {
             inp_shared[threadIdx.x] = 0.0f;
         }
@@ -164,8 +173,8 @@ __global__ void get_latest_k_q_v_paged_attention(
         __syncthreads();
     }
     if (output_col_idx < emb_dim) {
-        set_page_table_value(page_pos[0], i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, K_CACHE_EMB_OFFSET, k_result);
-        set_page_table_value(page_pos[0], i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, V_CACHE_EMB_OFFSET, v_result);
+        set_page_table_value(page_pos, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, K_CACHE_EMB_OFFSET, k_result);
+        set_page_table_value(page_pos, i_batch, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, output_col_idx, V_CACHE_EMB_OFFSET, v_result);
         q_output[i_batch * emb_dim + output_col_idx] = q_result;
     }
 }
@@ -203,10 +212,19 @@ __global__ void qkt_paged_attention(
     
     __shared__ float q_shared[TILE_SIZE];
     __shared__ float k_shared[TILE_SIZE][TILE_SIZE];
+    __shared__ const float* page_pos;
+    __shared__ int cur_batch_length;
     __shared__ float result_shared[TILE_SIZE];
     int batch_i = blockIdx.y;
     int result_col = blockIdx.x * TILE_SIZE + threadIdx.x;
-    int cur_batch_length = lengths[batch_i];
+    assert(TILE_SIZE == PAGE_BLOCK_SIZE);
+
+    if (threadIdx.x == 0) {
+        page_pos = page_table[batch_i * (n_sequence / PAGE_BLOCK_SIZE) + blockIdx.x];
+        cur_batch_length = lengths[batch_i];
+    }
+    __syncthreads();
+
     // all threads in this block exceed the cur_batch_lenght, no need to calculate
     if (blockIdx.x * TILE_SIZE >= cur_batch_length) {
         return;
@@ -222,14 +240,10 @@ __global__ void qkt_paged_attention(
             q_shared[threadIdx.x] = 0.0f;
         }
         
-        int i_block = -1;
-        const float* page_pos = nullptr;
+        // so this block is using the same page_pos
+        __syncthreads();
         for (int i_sequence = blockIdx.x * TILE_SIZE; i_sequence < blockIdx.x * TILE_SIZE + TILE_SIZE && i_sequence < cur_batch_length; i_sequence++) {
             if (i + threadIdx.x < emb_dim) {
-                if (i_sequence / PAGE_BLOCK_SIZE != i_block) {
-                    i_block = i_sequence / PAGE_BLOCK_SIZE;
-                    page_pos = page_table[batch_i * (n_sequence / PAGE_BLOCK_SIZE) + i_block];
-                }
                 k_shared[i_sequence - blockIdx.x * TILE_SIZE][threadIdx.x] = get_page_table_value(
                     page_pos, batch_i, n_sequence, i_sequence, emb_dim, PAGE_BLOCK_SIZE, i + threadIdx.x, K_CACHE_EMB_OFFSET);
             } else {
@@ -279,26 +293,30 @@ __global__ void softmax_v_paged_attention(
     int i_batch = blockIdx.y;
     __shared__ float softmax_res_share[TILE_SIZE_SQUARE];
     float result = 0.0;
+    __shared__ int cur_batch_length;
+    if (threadIdx.x == 0) {
+        cur_batch_length = lengths[i_batch];
+    }
+    __syncthreads();
 
-    int cur_batch_length = lengths[i_batch];
     const float* softmax_result_base = softmax_result + i_batch * n_sequence;
     int write_col = blockIdx.x * TILE_SIZE_SQUARE + threadIdx.x;
 
-    int i_block = -1;
-    const float* page_pos = nullptr;
+    assert(TILE_SIZE_SQUARE == PAGE_BLOCK_SIZE * PAGE_BLOCK_SIZE);
+    __shared__ const float* page_poses[TILE_SIZE];
+    
     for (int i = 0; i < cur_batch_length; i += TILE_SIZE_SQUARE) {
         if (i + threadIdx.x < cur_batch_length) {
             softmax_res_share[threadIdx.x] = softmax_result_base[i + threadIdx.x];
         } else {
             softmax_res_share[threadIdx.x] = 0.0f;
         }
+        if (threadIdx.x < TILE_SIZE && i + threadIdx.x * PAGE_BLOCK_SIZE < cur_batch_length) {
+            page_poses[threadIdx.x] = page_table[i_batch * (n_sequence / PAGE_BLOCK_SIZE) + (i + threadIdx.x * PAGE_BLOCK_SIZE) / PAGE_BLOCK_SIZE];
+        }
         __syncthreads();
         for (int j = 0; write_col < emb_dim && j < TILE_SIZE_SQUARE && i + j < cur_batch_length; ++j) {
-            if (i_block != (i + j) / PAGE_BLOCK_SIZE) {
-                i_block = (i + j) / PAGE_BLOCK_SIZE;
-                page_pos = page_table[i_batch * (n_sequence / PAGE_BLOCK_SIZE) + i_block];
-            }
-            result += (softmax_res_share[j] * get_page_table_value(page_pos, i_batch, n_sequence, i + j, emb_dim, PAGE_BLOCK_SIZE, write_col, V_CACHE_EMB_OFFSET));
+            result += (softmax_res_share[j] * get_page_table_value(page_poses[j / PAGE_BLOCK_SIZE], i_batch, n_sequence, i + j, emb_dim, PAGE_BLOCK_SIZE, write_col, V_CACHE_EMB_OFFSET));
         }
         __syncthreads();
     }

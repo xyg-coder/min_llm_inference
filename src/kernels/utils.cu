@@ -27,6 +27,19 @@ __global__ void compare_float_array_kernel(const float* data1, const float* data
     }
 }
 
+__global__ void compare_emb_array_kernel(const float* data1, const float* data2, const int*lengths, int n_batch, int emb_dim, float threshold, int* exception_flag) {
+    int i_batch = blockIdx.y;
+    if (lengths[i_batch] == 0) {
+        return;
+    }
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if (idx < emb_dim) {
+        if (fabsf(data1[i_batch * emb_dim + idx] - data2[i_batch * emb_dim  + idx]) > threshold) {
+            *exception_flag = 1;
+        }
+    }
+}
+
 __global__ void compare_int_array_kernel(const int* data1, const int* data2, int size, int* exception_flag) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     if (idx < size) {
@@ -153,6 +166,20 @@ void assert_float_kernel_close(const float* data1, const float* data2, int size,
     cudaMemcpy(d_exception_flag, &h_exception_flag, sizeof(int), cudaMemcpyHostToDevice);
     compare_float_array_kernel<<<ceil_div(size, blockDim), blockDim>>>(
         data1, data2, size, threshold, d_exception_flag);
+    CUDA_CHECK_LAST();
+    cudaMemcpy(&h_exception_flag, d_exception_flag, sizeof(int), cudaMemcpyDeviceToHost);
+    if (h_exception_flag) {
+        throw std::runtime_error("2 arrays are not close");
+    }
+}
+
+void assert_emb_kernel_close(const float* emb1, const float* emb2, const int*lengths, int n_batch, int emb_dim, float threshold) {
+    int *d_exception_flag, h_exception_flag = 0;
+    cudaMalloc(&d_exception_flag, sizeof(int));
+    cudaMemcpy(d_exception_flag, &h_exception_flag, sizeof(int), cudaMemcpyHostToDevice);
+    dim3 gridDim(ceil_div(emb_dim, TILE_SIZE_SQUARE), n_batch);
+    compare_emb_array_kernel<<<gridDim, TILE_SIZE_SQUARE>>>(
+        emb1, emb2, lengths, n_batch, emb_dim, threshold, d_exception_flag);
     CUDA_CHECK_LAST();
     cudaMemcpy(&h_exception_flag, d_exception_flag, sizeof(int), cudaMemcpyDeviceToHost);
     if (h_exception_flag) {

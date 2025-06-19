@@ -15,7 +15,7 @@ test:
 
 profile:
 	mkdir -p build
-	cd build && cmake -DUSE_ASYNC_ALLOC=OFF -DDEBUG_MODE=OFF -DBUILD_TESTS=OFF .. && make && nsys profile ./to_profile
+	cd build && cmake -DUSE_ASYNC_ALLOC=OFF -DDEBUG_MODE=OFF -DBUILD_TESTS=OFF .. && make && nsys profile ./cublas_to_profile
 
 all_test: test_async_flag_on test_async_flag_off
 

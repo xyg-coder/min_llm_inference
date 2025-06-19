@@ -2,6 +2,7 @@
 
 #include "tensor.hpp"
 #include "utils.h"
+#include <cublas_v2.h>
 #include <optional>
 
 
@@ -36,7 +37,7 @@ private:
 class PagedAttentionLayer : public NonCopyableNonClonable {
 public:
     PagedAttentionLayer(TensorFloat&& wk, TensorFloat&& wq, TensorFloat&& wv,
-        size_t n_batch, size_t input_dim, size_t n_sequence);
+        size_t n_batch, size_t emb_dim, size_t n_sequence);
     void forward(TensorFloatPoint& page_table, const TensorInt& lengths,
         const TensorInt& new_batch_idx, TensorFloat& attention_result, int n_new_items);
 private:
@@ -47,6 +48,22 @@ private:
     TensorFloat qkt_output_;
 };
 
+class PagedAttentionCublasLayer : public NonCopyableNonClonable {
+public:
+    PagedAttentionCublasLayer(TensorFloat&& wk, TensorFloat&& wq, TensorFloat&& wv,
+        size_t n_batch, size_t emb_dim, size_t n_sequence);
+    void forward(TensorFloatPoint& page_table, const TensorInt& lengths,
+        const TensorInt& new_batch_idx, TensorFloat& attention_result, int n_new_items,
+        cublasHandle_t& handle);
+private:
+    TensorFloat wk_;
+    TensorFloat wq_;
+    TensorFloat wv_;
+    TensorFloat q_output_;
+    TensorFloat qkt_output_;
+    TensorFloat latest_emb_;
+    TensorFloat temp_placeholder_;
+};
 
 /**
  * emb_table: [n_vocab, inputDim]
@@ -114,6 +131,26 @@ public:
         const TensorFloat& wpe_table,
         TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result,
         int i_decoder_round);
+private:
+    TensorFloat emb_score_;
+};
+
+/**
+ * batch_result: [n_batch, input_dim]
+ * emb_table: [n_vocab, input_dim]
+ * emb_score: [n_batch, n_vocab]
+ * inp_embedding: [n_batch, n_sequence, input_dim]
+ * lengths: [n_batch]
+ * decoder_result: [n_batch]
+ */
+class PagedCublasDecoderLayer : public NonCopyableNonClonable {
+public:
+    PagedCublasDecoderLayer(size_t n_batch, size_t n_vocab);
+    void forward(
+        const TensorFloat& batch_result, const TensorFloat& emb_table,
+        const TensorFloat& wpe_table,
+        TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result,
+        int i_decoder_round, cublasHandle_t& handle);
 private:
     TensorFloat emb_score_;
 };
