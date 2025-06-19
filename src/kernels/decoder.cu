@@ -246,7 +246,7 @@ void launch_paged_attention_cublas_decoder_multi_rounds(
     float alpha = 1.0f, beta = 0.0f;
     CHECK_CUBLAS(
         cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, n_vocab, batch_size, emb_dim, &alpha,
-            emb_table.data(), n_vocab, batch_result.data(), emb_dim, &beta, emb_score.data(), n_vocab));
+            emb_table.data(), emb_dim, batch_result.data(), emb_dim, &beta, emb_score.data(), n_vocab));
 
     dim3 gridDim(1, batch_size);
     paged_attention_decoder_kernel_with_multi_decoder<<<gridDim, BLOCK_DIM>>>(emb_score.data(), decoder_result.data(), lengths.data(),
