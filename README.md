@@ -70,7 +70,7 @@ Total tokens: 197136, seconds: 8.761, throughput: 22501.5
 Compute throughput: 24%
 
 Use cublas inside the paged attention:
-Total tokens: 195540, seconds: 3.835, throughput: 50988.3
+Total tokens: 196539, seconds: 2.314, throughput: 84934.7
 
 ## Plan
 

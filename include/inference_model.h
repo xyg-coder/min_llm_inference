@@ -56,7 +56,7 @@ public:
     PagedAttentionCublasInferenceModel(
         PagedAttentionCublasLayer&&,
         PagedEncoderLayer&&,
-        PagedDecoderLayer&&,
+        PagedCublasDecoderLayer&&,
         size_t n_batch, size_t n_sequence, size_t emb_dim, int n_forward_rounds);
 
     void forward(
@@ -65,7 +65,7 @@ public:
 private:
     PagedAttentionCublasLayer paged_attention_layer_;
     PagedEncoderLayer paged_encoder_layer_;
-    PagedDecoderLayer paged_decoder_layer_;
+    PagedCublasDecoderLayer paged_decoder_layer_;
     size_t n_batch_;
     size_t n_sequence_;
     size_t emb_dim_;

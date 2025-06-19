@@ -134,3 +134,23 @@ public:
 private:
     TensorFloat emb_score_;
 };
+
+/**
+ * batch_result: [n_batch, input_dim]
+ * emb_table: [n_vocab, input_dim]
+ * emb_score: [n_batch, n_vocab]
+ * inp_embedding: [n_batch, n_sequence, input_dim]
+ * lengths: [n_batch]
+ * decoder_result: [n_batch]
+ */
+class PagedCublasDecoderLayer : public NonCopyableNonClonable {
+public:
+    PagedCublasDecoderLayer(size_t n_batch, size_t n_vocab);
+    void forward(
+        const TensorFloat& batch_result, const TensorFloat& emb_table,
+        const TensorFloat& wpe_table,
+        TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result,
+        int i_decoder_round, cublasHandle_t& handle);
+private:
+    TensorFloat emb_score_;
+};

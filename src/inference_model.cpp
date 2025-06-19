@@ -84,7 +84,7 @@ void PagedAttentionInferenceModel::forward(
 PagedAttentionCublasInferenceModel::PagedAttentionCublasInferenceModel(
     PagedAttentionCublasLayer&& attention_layer,
     PagedEncoderLayer&& encoder_layer,
-    PagedDecoderLayer&& decoder_layer,
+    PagedCublasDecoderLayer&& decoder_layer,
     size_t n_batch, size_t n_sequence, size_t emb_dim, int n_forward_rounds): paged_attention_layer_(std::move(attention_layer)),
         paged_encoder_layer_(std::move(encoder_layer)), paged_decoder_layer_(std::move(decoder_layer)),
         n_batch_(n_batch), n_sequence_(n_sequence), emb_dim_(emb_dim),
@@ -119,6 +119,6 @@ void PagedAttentionCublasInferenceModel::forward(
             pos_emb_table,
             page_table,
             lengths,
-            decoder_result, i);
+            decoder_result, i, handle);
     }
 }

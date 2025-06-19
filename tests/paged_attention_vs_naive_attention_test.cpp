@@ -139,7 +139,7 @@ TEST(InferenceCompareTest, Compare2InferencesCublas) {
             std::move(wv),
             max_batches, emb_dims, n_sequence),
         PagedEncoderLayer(),
-        PagedDecoderLayer(max_batches, n_vocab),
+        PagedCublasDecoderLayer(max_batches, n_vocab),
         max_batches, n_sequence, emb_dims, 1);
     
     auto paged_attention_start = std::chrono::high_resolution_clock::now();

@@ -143,3 +143,12 @@ void PagedDecoderLayer::forward(const TensorFloat& batch_result, const TensorFlo
 
     launch_paged_attention_decoder_multi_rounds(batch_result, emb_table, emb_score_, wpe_table, page_table, lengths, decoder_result, i_decoder_round);
 }
+
+PagedCublasDecoderLayer::PagedCublasDecoderLayer(size_t n_batch, size_t n_vocab): emb_score_(TensorFloat({n_batch, n_vocab}, DeviceType::DEVICE)) { }
+
+void PagedCublasDecoderLayer::forward(const TensorFloat& batch_result, const TensorFloat& emb_table,
+    const TensorFloat& wpe_table,
+    TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result, int i_decoder_round, cublasHandle_t& handle) {
+
+    launch_paged_attention_cublas_decoder_multi_rounds(batch_result, emb_table, emb_score_, wpe_table, page_table, lengths, decoder_result, i_decoder_round, handle);
+}
