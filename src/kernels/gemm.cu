@@ -2,6 +2,7 @@
 #include "utils.h"
 #include "constants.h"
 #include <cstddef>
+#include <cublas_v2.h>
 
 
 /**

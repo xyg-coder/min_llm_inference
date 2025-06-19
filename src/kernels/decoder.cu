@@ -6,6 +6,7 @@
 #include "utils.h"
 #include <cassert>
 #include <cfloat>
+#include <cublas_v2.h>
 
 
 /**
@@ -220,6 +221,32 @@ void launch_paged_attention_decoder_multi_rounds(
 
     launch_gemm_transpose_kernel(
         batch_result.data(), emb_table.data(), emb_score.data(), 1, batch_size, n_vocab, emb_dim);
+
+    dim3 gridDim(1, batch_size);
+    paged_attention_decoder_kernel_with_multi_decoder<<<gridDim, BLOCK_DIM>>>(emb_score.data(), decoder_result.data(), lengths.data(),
+        page_table.data(), wpe_table.data(), emb_table.data(), batch_size, n_vocab, n_sequence, emb_dim, PAGE_BLOCK_SIZE, n_decoder_results, i_decoder);
+    CUDA_CHECK_LAST();
+}
+
+
+void launch_paged_attention_cublas_decoder_multi_rounds(
+    const TensorFloat& batch_result, const TensorFloat& emb_table,
+    TensorFloat& emb_score,
+    const TensorFloat& wpe_table,
+    TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result, int i_decoder, cublasHandle_t& handle) {
+
+    int batch_size = batch_result.shape()[0];
+    int emb_dim = batch_result.shape()[1];
+    int n_vocab = emb_table.shape()[0];
+    int n_sequence = wpe_table.shape()[0];
+    int n_decoder_results = 1;
+    if (decoder_result.shape().size() == 2) {
+        n_decoder_results = decoder_result.shape()[1];
+    }
+    float alpha = 1.0f, beta = 0.0f;
+    CHECK_CUBLAS(
+        cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, n_vocab, batch_size, emb_dim, &alpha,
+            emb_table.data(), n_vocab, batch_result.data(), emb_dim, &beta, emb_score.data(), n_vocab));
 
     dim3 gridDim(1, batch_size);
     paged_attention_decoder_kernel_with_multi_decoder<<<gridDim, BLOCK_DIM>>>(emb_score.data(), decoder_result.data(), lengths.data(),

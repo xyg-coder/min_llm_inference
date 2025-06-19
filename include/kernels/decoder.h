@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tensor.hpp"
+#include <cublas_v2.h>
 
 /**
  * batch_result: [n_batch, input_dim]
@@ -27,3 +28,10 @@ void launch_paged_attention_decoder_multi_rounds(
     TensorFloat& emb_score,
     const TensorFloat& wpe_table,
     TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result, int i_decoder);
+
+
+void launch_paged_attention_cublas_decoder_multi_rounds(
+    const TensorFloat& batch_result, const TensorFloat& emb_table,
+    TensorFloat& emb_score,
+    const TensorFloat& wpe_table,
+    TensorFloatPoint& page_table, TensorInt& lengths, TensorInt& decoder_result, int i_decoder, cublasHandle_t& handle);
