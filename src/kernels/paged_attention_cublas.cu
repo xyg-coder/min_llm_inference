@@ -35,6 +35,7 @@ __global__ void get_latest_batch_embs(
     }
 }
 
+
 /**
  * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
  * lengths: [n_batch]
