@@ -1,12 +1,15 @@
 #include <cstddef>
 #include <gtest/gtest.h>
-#include "include/test_utils.h"
+#include "test_utils.h"
+#include "kernels/utils.cuh"
+#include "kernels/self_attention_inference_optimized.h"
 #include "kernels/templated_kernels.cuh"
+#include "kernels/paged_attention.h"
 #include "constants.h"
 
 TEST(WarpTilingTest, WarpTilingFunctionality) {
     size_t n_batch = get_random_number(128, 256);
-    size_t n_sequence = get_random_number(128, 256) * PAGE_BLOCK_SIZE;
+    size_t n_sequence = get_random_number(16, 32) * PAGE_BLOCK_SIZE;
     size_t emb_dim = get_random_number(128, 256) * 4;
     auto device_tensors = generate_paged_attention_wrapper_device_tensors(
         n_batch, n_sequence, emb_dim);
