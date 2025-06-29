@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cublas_v2.h>
 #include "kernels/paged_attention.h"
+#include "kernels/templated_kernels.cuh"
 
 /**
  * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
@@ -95,6 +96,29 @@ void launch_get_latest_k_q_v_paged_attention_cublas(
     CUDA_CHECK_LAST();
     CHECK_CUBLAS(cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, emb_dim, n_batch, emb_dim, &alpha, wq.data(),
         emb_dim, latest_emb.data(), emb_dim, &beta, q_output.data(), emb_dim));
+}
+
+void launch_fill_new_k_v_cache_paged_attention_warp_tiling(
+    TensorFloatPoint page_table, const TensorInt& new_batch_idx, const TensorInt& lengths,
+    const TensorFloat& wk, const TensorFloat& wv, int n_new_items, int n_sequence) {
+
+    if (n_new_items == 0) {
+        return;
+    }
+
+    int n_batch = page_table.shape()[0];
+    assert(page_table.shape()[1] == n_sequence / PAGE_BLOCK_SIZE && n_sequence % PAGE_BLOCK_SIZE == 0);
+    int emb_dim = wk.shape()[0];
+    assert(wk.shape()[0] == wk.shape()[1]);
+    constexpr int N_THREADS = 256;
+    constexpr int BM = 32, BN = 64, BK = 64, WM = 32, WN = 32, TM = 4, TN = 4, WNITER = 2;
+
+    fill_new_k_v_cache_paged_attention_warp_tiling<BM, BN, BK, WM, WN, TM, TN, WNITER, N_THREADS>
+        <<<dim3(ceil_div(emb_dim, BN), ceil_div(emb_dim, BM), n_new_items), N_THREADS>>>(
+            page_table.data(), new_batch_idx.data(), lengths.data(),
+            wk.data(), wv.data(), n_sequence, emb_dim);
+    
+    CUDA_CHECK_LAST();
 }
 
 
