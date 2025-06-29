@@ -239,42 +239,6 @@ setup_ssh_key() {
     echo "If you see 'Hi [username]! You've successfully authenticated', SSH is working!"
 }
 
-# 3. Clone the repository
-clone_repository() {
-    echo "==================================="
-    echo "Cloning repository..."
-    echo "==================================="
-    
-    REPO_URL="git@github.com:xyg-coder/min_llm_inference.git"
-    REPO_NAME="min_llm_inference"
-    
-    # Check if repository already exists
-    if [ -d "$REPO_NAME" ]; then
-        echo "Repository '$REPO_NAME' already exists."
-        read -p "Do you want to remove it and clone fresh? (y/N): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            rm -rf "$REPO_NAME"
-        else
-            echo "Keeping existing repository."
-            return 0
-        fi
-    fi
-    
-    # Clone the repository
-    echo "Cloning $REPO_URL..."
-    if git clone "$REPO_URL"; then
-        echo "Repository cloned successfully!"
-        echo "Repository location: $(pwd)/$REPO_NAME"
-    else
-        echo "Failed to clone repository. Please check:"
-        echo "1. Your SSH key is properly added to GitHub"
-        echo "2. You have access to the repository"
-        echo "3. Your internet connection is working"
-        exit 1
-    fi
-}
-
 # Function to fix CUDA paths in current session
 fix_cuda_paths() {
     echo "==================================="
@@ -375,7 +339,6 @@ main() {
     echo
     setup_ssh_key
     echo
-    clone_repository
     
     echo ""
     echo "==================================="
