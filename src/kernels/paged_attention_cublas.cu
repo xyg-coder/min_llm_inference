@@ -122,6 +122,7 @@ __global__ void fill_new_k_v_cache_paged_attention_warp_tiling(
     static_assert(BM % TM == 0, "BM must be divisible by TM");
     static_assert(BN % TN == 0, "BN must be divisible by TN");
     static_assert(N_THREADS * 4 % BK == 0, "N_THREADS * 4 must be divisible by BK");
+    static_assert(N_THREADS * 4 % BN == 0, "N_THREADS * 4 must be divisible by BK");
     static_assert(WSUBN % TN == 0, "WSUBN must be divisible by TN");
     static_assert(WSUBM % TM == 0, "WSUBN must be divisible by TN");
     static_assert(WSUBM <= WARP_SIZE, "WSUBM must be less than or equal to WARP_SIZE to avoid bank conflicts");
@@ -236,7 +237,7 @@ void launch_fill_new_k_v_cache_paged_attention_warp_tiling(
     constexpr int BM = 32, BN = 64, BK = 64, WM = 32, WN = 32, TM = 4, TN = 4, WNITER = 2;
 
     fill_new_k_v_cache_paged_attention_warp_tiling<BM, BN, BK, WM, WN, TM, TN, WNITER, N_THREADS>
-        <<<dim3(ceil_div(emb_dim, BN), ceil_div(emb_dim, BM), n_new_items), N_THREADS>>>(
+        <<<dim3(ceil_div(emb_dim, BN), ceil_div(n_sequence, BM), n_new_items), N_THREADS>>>(
             page_table.data(), new_batch_idx.data(), lengths.data(),
             wk.data(), wv.data(), n_sequence, emb_dim);
     

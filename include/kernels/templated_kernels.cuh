@@ -16,7 +16,7 @@ __device__ void load_from_page_table(
 
     for (int i_row_inp = inner_row_inp; i_row_inp + ROW_STRIDE_INP <= BM; i_row_inp += ROW_STRIDE_INP) {
         float4 tmp;
-        if (i_row_inp >= cur_batch_length) {
+        if (row_offset + i_row_inp >= cur_batch_length || k_offset + inner_col_inp * 4 >= emb_dim) {
             tmp = {0.0f, 0.0f, 0.0f, 0.0f};
         } else {
             int page_idx = (row_offset + i_row_inp) / PAGE_BLOCK_SIZE;
@@ -43,12 +43,12 @@ __device__ void load_from_kv(
 
     for (int i_row_wk_wv = inner_row_wk_wv; i_row_wk_wv + ROW_STRIDE_WK_WV <= BK; i_row_wk_wv += ROW_STRIDE_WK_WV) {
         float4 tmp;
-        if (i_row_wk_wv >= emb_dim) {
+        if (k_offset + i_row_wk_wv >= emb_dim || col_offset + inner_col_wk_wv * 4 >= emb_dim) {
             tmp = {0.0f, 0.0f, 0.0f, 0.0f};
         } else {
             tmp = reinterpret_cast<const float4*>(kv + (k_offset + i_row_wk_wv) * emb_dim + col_offset + inner_col_wk_wv * 4)[0];
         }
-        reinterpret_cast<float4*>(shared_wk_wv + inner_row_wk_wv * 4 * BN + inner_col_wk_wv)[0] = tmp;
+        reinterpret_cast<float4*>(shared_wk_wv + i_row_wk_wv * BN + inner_col_wk_wv * 4)[0] = tmp;
     }
 }
 
