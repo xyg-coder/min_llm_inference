@@ -46,9 +46,9 @@ __device__ void load_from_kv(
         if (k_offset + row_in_block >= emb_dim || col_offset + innerColB * 4 >= emb_dim) {
             tmp = {0.0f, 0.0f, 0.0f, 0.0f};
         } else {
-            tmp = reinterpret_cast<const float4*>(kv + (k_offset + innerRowB) * emb_dim + col_offset + innerColB * 4)[0];
+            tmp = reinterpret_cast<const float4*>(kv + (k_offset + row_in_block) * emb_dim + col_offset + innerColB * 4)[0];
         }
-        reinterpret_cast<float4*>(shared_wk_wv + innerRowB * BN + innerColB * 4)[0] = tmp;
+        reinterpret_cast<float4*>(shared_wk_wv + row_in_block * BN + innerColB * 4)[0] = tmp;
     }
 }
 
