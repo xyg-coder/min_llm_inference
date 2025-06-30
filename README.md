@@ -74,4 +74,5 @@ Total tokens: 196539, seconds: 2.314, throughput: 84934.7
 
 ## Plan
 
+* Fix the warp-tiling version
 * How to use multi-gpus to accelerate

@@ -61,3 +61,7 @@ void launch_get_latest_k_q_v_paged_attention_cublas(
     const TensorFloat& wk, const TensorFloat& wq,
     const TensorFloat& wv, TensorFloat& q_output, TensorFloat& temp_placeholder,
     cublasHandle_t& handle, int n_sequence);
+
+void launch_fill_new_k_v_cache_paged_attention_warp_tiling(
+    TensorFloatPoint page_table, const TensorInt& new_batch_idx, const TensorInt& lengths,
+    const TensorFloat& wk, const TensorFloat& wv, int n_new_items, int n_sequence);
