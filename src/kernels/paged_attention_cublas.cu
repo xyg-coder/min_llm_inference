@@ -98,6 +98,8 @@ void launch_get_latest_k_q_v_paged_attention_cublas(
         emb_dim, latest_emb.data(), emb_dim, &beta, q_output.data(), emb_dim));
 }
 
+constexpr int WARPSIZE = 32;
+
 /**
  * page_table: [n_batch, n_sequence / PAGE_BLOCK_SIZE]
  * new_batch_idx: [n_new_batch]
@@ -115,7 +117,7 @@ __global__ void fill_new_k_v_cache_paged_attention_warp_tiling(
     const float* wk, const float* wv,
     int n_sequence, int emb_dim) {
 
-    constexpr int WMITER = (WM * WN) / (WARP_SIZE * TM * TN * WNITER);
+    constexpr int WMITER = (WM * WN) / (WARPSIZE * TM * TN * WNITER);
     constexpr int WSUBM = WM / WMITER;
     constexpr int WSUBN = WN / WNITER;
 
@@ -134,27 +136,27 @@ __global__ void fill_new_k_v_cache_paged_attention_warp_tiling(
     int cur_length = lengths[batch_idx];
 
     // The starting position is [output_block_row_id * BM, output_block_col_id * BN]
-    int output_block_row_id = blockIdx.y;
-    int output_block_col_id = blockIdx.x;
+    int cRow = blockIdx.y;
+    int cCol = blockIdx.x;
 
     
     __shared__ float shared_inp[BM * BK];
     __shared__ float shared_wk[BK * BN];
     __shared__ float shared_wv[BK * BN];
 
-    if (output_block_row_id * BM >= cur_length) {
+    if (cRow * BM >= cur_length) {
         return;
     }
     page_table += batch_idx * (n_sequence / PAGE_BLOCK_SIZE);
 
-    constexpr int ROW_STRIDE_INP = N_THREADS * 4 / BK;
-    constexpr int ROW_STRIDE_WK_WV = N_THREADS * 4 / BN;
+    constexpr int rowStrideA = N_THREADS * 4 / BK;
+    constexpr int rowStrideB = N_THREADS * 4 / BN;
 
     // Place the thread in the block
-    int inner_row_inp = (threadIdx.x / (BK / 4));
-    int inner_col_inp = (threadIdx.x % (BK / 4));
-    int inner_row_wk_wv = (threadIdx.x / (BN / 4));
-    int inner_col_wk_wv = (threadIdx.x % (BN / 4));
+    int innerRowA = (threadIdx.x / (BK / 4));
+    int innerColA = (threadIdx.x % (BK / 4));
+    int innerRowB = (threadIdx.x / (BN / 4));
+    int innerColB = (threadIdx.x % (BN / 4));
 
     float reg_inp[TM * WMITER] = {0};
     float reg_wk[TN * WNITER] = {0};
@@ -163,41 +165,44 @@ __global__ void fill_new_k_v_cache_paged_attention_warp_tiling(
     float thread_result_v[TM * WMITER * TN * WNITER] = {0};
 
     // place the warp in the block
-    int warp_index = threadIdx.x / WARP_SIZE;
-    int warp_row_id = warp_index / (BN / WN);
-    int warp_col_id = warp_index % (BN / WN);
+    int warpIdx = threadIdx.x / WARPSIZE;
+    int warpRow = warpIdx / (BN / WN);
+    int warpCol = warpIdx % (BN / WN);
 
     // place the thread in the warp
-    int id_in_warp = threadIdx.x % WARP_SIZE;
-    int row_in_warp = id_in_warp / (WSUBN / TN);
-    int col_in_warp = id_in_warp % (WSUBN / TN);
+    int threadIdxInWarp = threadIdx.x % WARPSIZE;
+    int threadRowInWarp = threadIdxInWarp / (WSUBN / TN);
+    int threadColInWarp = threadIdxInWarp % (WSUBN / TN);
 
     for (int bk_idx = 0; bk_idx < emb_dim; bk_idx += BK) {
-        load_from_page_table<N_THREADS, ROW_STRIDE_INP, BM>(
+        load_from_page_table<N_THREADS, rowStrideA, BM>(
             page_table, n_sequence, emb_dim,
-            shared_inp, inner_row_inp, inner_col_inp, output_block_row_id * BM, bk_idx, cur_length);
-        load_from_kv<N_THREADS, ROW_STRIDE_WK_WV, BN, BK>(
+            shared_inp, innerRowA, innerColA, cRow * BM, bk_idx, cur_length);
+        load_from_kv<N_THREADS, rowStrideB, BN, BK>(
             wk, emb_dim,
-            shared_wk, inner_row_wk_wv, inner_col_wk_wv, bk_idx, output_block_col_id * BN);
-        load_from_kv<N_THREADS, ROW_STRIDE_WK_WV, BN, BK>(
+            shared_wk, innerRowB, innerColB, bk_idx, cCol * BN);
+        load_from_kv<N_THREADS, rowStrideB, BN, BK>(
             wv, emb_dim,
-            shared_wv, inner_row_wk_wv, inner_col_wk_wv, bk_idx, output_block_col_id * BN);
+            shared_wv, innerRowB, innerColB, bk_idx, cCol * BN);
         __syncthreads();
 
         process_result<WM, WN, WMITER, WNITER, TM, TN, BM, BN, BK, WSUBM, WSUBN>(
             shared_inp, shared_wk, shared_wv,
             reg_inp, reg_wk, reg_wv,
             thread_result_k, thread_result_v,
-            warp_row_id, warp_col_id, row_in_warp, col_in_warp);
+            warpRow, warpCol, threadRowInWarp, threadColInWarp);
         __syncthreads();
     }
 
+    // row: cRow * BM + warpRow * WM + wSubRowIdx * WSUBM + threadRowInWarp * TM + resIdxM
+    // col: cCol * BN + warpCol * WN +  wSubColIdx * WSUBN + threadColInWarp * TN + resIdxN]
+    // result: wSubRowIdx * TM + resIdxM) * (WNITER * TN) + wSubColIdx * TN + resIdxN
 
     int cached_paged_idx = -1;
     float* cached_page_pos = nullptr;
-    for (int i_wm_iter = 0; i_wm_iter < WMITER; ++i_wm_iter) {
-        for (int i_tm = 0; i_tm < TM; ++i_tm) {
-            int output_row = output_block_row_id * BM + warp_row_id * WM + i_wm_iter * WSUBM + row_in_warp * TM + i_tm;
+    for (int wSubRowIdx = 0; wSubRowIdx < WMITER; ++wSubRowIdx) {
+        for (int resIdxM = 0; resIdxM < TM; ++resIdxM) {
+            int output_row = cRow * BM + warpRow * WM + wSubRowIdx * WSUBM + threadRowInWarp * TM + resIdxM;
             if (output_row < cur_length) {
                 int page_idx = output_row / PAGE_BLOCK_SIZE;
                 if (cached_paged_idx != page_idx) {
@@ -205,15 +210,15 @@ __global__ void fill_new_k_v_cache_paged_attention_warp_tiling(
                     cached_page_pos = page_table[page_idx];
                 }
 
-                for (int i_wn_iter = 0; i_wn_iter < WNITER; ++i_wn_iter) {
-                    for (int i_tn = 0; i_tn < TN; i_tn += 4) {
-                        int output_col = output_block_col_id * BN + warp_col_id * WN + i_wn_iter * WSUBN + col_in_warp * TN + i_tn;
+                for (int wSubColIdx = 0; wSubColIdx < WNITER; ++wSubColIdx) {
+                    for (int resIdxN = 0; resIdxN < TN; resIdxN += 4) {
+                        int output_col = cCol * BN + warpCol * WN + wSubColIdx * WSUBN + threadColInWarp * TN + resIdxN;
                         if (output_col < emb_dim) {
                             assert(output_col + 3 < emb_dim);
                             int k_offset = (output_row % PAGE_BLOCK_SIZE) * emb_dim * 3 + emb_dim * K_CACHE_EMB_OFFSET + output_col;
                             int v_offset = (output_row % PAGE_BLOCK_SIZE) * emb_dim * 3 + emb_dim * V_CACHE_EMB_OFFSET + output_col;
-                            reinterpret_cast<float4*>(cached_page_pos + k_offset)[0] = reinterpret_cast<float4*>(thread_result_k + (i_wm_iter * TM + i_tm) * WNITER * TN + i_wn_iter * TN + i_tn)[0];
-                            reinterpret_cast<float4*>(cached_page_pos + v_offset)[0] = reinterpret_cast<float4*>(thread_result_v + (i_wm_iter * TM + i_tm) * WNITER * TN + i_wn_iter * TN + i_tn)[0];
+                            reinterpret_cast<float4*>(cached_page_pos + k_offset)[0] = reinterpret_cast<float4*>(thread_result_k + (wSubRowIdx * TM + resIdxM) * WNITER * TN + wSubColIdx * TN + resIdxN)[0];
+                            reinterpret_cast<float4*>(cached_page_pos + v_offset)[0] = reinterpret_cast<float4*>(thread_result_v + (wSubRowIdx * TM + resIdxM) * WNITER * TN + wSubColIdx * TN + resIdxN)[0];
                         }
                     }
                 }

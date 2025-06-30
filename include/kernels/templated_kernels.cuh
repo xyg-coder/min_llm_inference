@@ -3,52 +3,52 @@
 #include <cuda_runtime.h>
 #include "constants.h"
 
-template<const int N_THREADS, const int ROW_STRIDE_INP,
+template<const int N_THREADS, const int rowStrideA,
          const int BM>
 __device__ void load_from_page_table(
     float** page_table,
     int n_sequence, int emb_dim,
     float* shared_inp,
-    int inner_row_inp,
-    int inner_col_inp, int row_offset, int k_offset, int cur_batch_length) {
+    int innerRowA,
+    int innerColA, int row_offset, int k_offset, int cur_batch_length) {
     int cached_paged_idx = -1;
     float* cached_page_pos = nullptr;
 
-    for (int i_row_inp = inner_row_inp; i_row_inp < BM; i_row_inp += ROW_STRIDE_INP) {
+    for (int row_in_block = innerRowA; row_in_block < BM; row_in_block += rowStrideA) {
         float4 tmp;
-        if (row_offset + i_row_inp >= cur_batch_length || k_offset + inner_col_inp * 4 >= emb_dim) {
+        if (row_offset + row_in_block >= cur_batch_length || k_offset + innerColA * 4 >= emb_dim) {
             tmp = {0.0f, 0.0f, 0.0f, 0.0f};
         } else {
-            int page_idx = (row_offset + i_row_inp) / PAGE_BLOCK_SIZE;
+            int page_idx = (row_offset + row_in_block) / PAGE_BLOCK_SIZE;
             if (cached_paged_idx != page_idx) {
                 cached_paged_idx = page_idx;
                 cached_page_pos = page_table[page_idx];
             }
-            int inp_offset = ((row_offset + i_row_inp) % PAGE_BLOCK_SIZE) * emb_dim * 3 + emb_dim * INP_EMB_EMB_OFFSET + k_offset + inner_col_inp * 4;
+            int inp_offset = ((row_offset + row_in_block) % PAGE_BLOCK_SIZE) * emb_dim * 3 + emb_dim * INP_EMB_EMB_OFFSET + k_offset + innerColA * 4;
             tmp = reinterpret_cast<const float4*>(cached_page_pos + inp_offset)[0];
         }
-        shared_inp[inner_col_inp * 4 * BM + i_row_inp] = tmp.x;
-        shared_inp[(inner_col_inp * 4 + 1) * BM + i_row_inp] = tmp.y;
-        shared_inp[(inner_col_inp * 4 + 2) * BM + i_row_inp] = tmp.z;
-        shared_inp[(inner_col_inp * 4 + 3) * BM + i_row_inp] = tmp.w;
+        shared_inp[innerColA * 4 * BM + row_in_block] = tmp.x;
+        shared_inp[(innerColA * 4 + 1) * BM + row_in_block] = tmp.y;
+        shared_inp[(innerColA * 4 + 2) * BM + row_in_block] = tmp.z;
+        shared_inp[(innerColA * 4 + 3) * BM + row_in_block] = tmp.w;
     }
 }
 
-template<const int N_THREADS, const int ROW_STRIDE_WK_WV,
+template<const int N_THREADS, const int rowStrideB,
          const int BN, const int BK>
 __device__ void load_from_kv(
     const float* kv, int emb_dim,
     float* shared_wk_wv,
-    int inner_row_wk_wv, int inner_col_wk_wv, int k_offset, int col_offset) {
+    int innerRowB, int innerColB, int k_offset, int col_offset) {
 
-    for (int i_row_wk_wv = inner_row_wk_wv; i_row_wk_wv < BK; i_row_wk_wv += ROW_STRIDE_WK_WV) {
+    for (int row_in_block = innerRowB; row_in_block < BK; row_in_block += rowStrideB) {
         float4 tmp;
-        if (k_offset + i_row_wk_wv >= emb_dim || col_offset + inner_col_wk_wv * 4 >= emb_dim) {
+        if (k_offset + row_in_block >= emb_dim || col_offset + innerColB * 4 >= emb_dim) {
             tmp = {0.0f, 0.0f, 0.0f, 0.0f};
         } else {
-            tmp = reinterpret_cast<const float4*>(kv + (k_offset + i_row_wk_wv) * emb_dim + col_offset + inner_col_wk_wv * 4)[0];
+            tmp = reinterpret_cast<const float4*>(kv + (k_offset + innerRowB) * emb_dim + col_offset + innerColB * 4)[0];
         }
-        reinterpret_cast<float4*>(shared_wk_wv + i_row_wk_wv * BN + inner_col_wk_wv * 4)[0] = tmp;
+        reinterpret_cast<float4*>(shared_wk_wv + innerRowB * BN + innerColB * 4)[0] = tmp;
     }
 }
 
@@ -57,35 +57,47 @@ template<const int WM, const int WN, const int WMITER, const int WNITER,
 __device__ void process_result(
     const float* shared_inp, const float* shared_wk, const float* shared_wv,
     float* reg_inp, float* reg_k, float* reg_v, float* thread_result_k, float* thread_result_v,
-    int warp_row_id, int warp_col_id, int row_in_warp, int col_in_warp) {
+    int warpRow, int warpCol, int threadRowInWarp, int threadColInWarp) {
 
-    for (int i_k = 0; i_k < BK; ++i_k) {
-        for (int i_wm_iter = 0; i_wm_iter < WMITER; ++i_wm_iter) {
-            for (int i_tm = 0; i_tm < TM; ++i_tm) {
-                // as long as number_of_rows_in_warp * TM <= 32, we can avoid bank conflicts
-                reg_inp[i_wm_iter * TM + i_tm] = shared_inp[i_k * BM + warp_row_id * WM + i_wm_iter * WSUBM + row_in_warp * TM + i_tm];
-            }
-        }
-        for (int i_wn_iter = 0; i_wn_iter < WNITER; ++i_wn_iter) {
-            for (int i_tn = 0; i_tn < TN; ++i_tn) {
-                // as long as number_of_cols_in_warp * TN <= 32, we can avoid bank conflicts
-                reg_k[i_wn_iter * TN + i_tn] = shared_wk[i_k * BN + warp_col_id * WN + i_wn_iter * WSUBN + col_in_warp * TN + i_tn];
-                reg_v[i_wn_iter * TN + i_tn] = shared_wv[i_k * BN + warp_col_id * WN + i_wn_iter * WSUBN + col_in_warp * TN + i_tn];
-            }
-        }
-        for (int i_tm = 0; i_tm < TM; ++i_tm) {
-            for (int i_tn = 0; i_tn < TN; ++i_tn) {
-                for (int i_wm_iter = 0; i_wm_iter < WMITER; ++i_wm_iter) {
-                    for (int i_wn_iter = 0; i_wn_iter < WNITER; ++i_wn_iter) {
-                        thread_result_k[(i_wm_iter * TM + i_tm) * WNITER * TN + i_wn_iter * TN + i_tn] +=
-                            reg_inp[i_wm_iter * TM + i_tm] * reg_k[i_wn_iter * TN + i_tn];
-                        thread_result_v[(i_wm_iter * TM + i_tm) * WNITER * TN + i_wn_iter * TN + i_tn] +=
-                            reg_inp[i_wm_iter * TM + i_tm] * reg_v[i_wn_iter * TN + i_tn];
-                    }
-                }
-            }
-        }
+  for (uint dotIdx = 0; dotIdx < BK; ++dotIdx) {
+    // populate registers for whole warptile
+    for (uint wSubRowIdx = 0; wSubRowIdx < WMITER; ++wSubRowIdx) {
+      for (uint i = 0; i < TM; ++i) {
+        reg_inp[wSubRowIdx * TM + i] =
+            shared_inp[(dotIdx * BM) + warpRow * WM + wSubRowIdx * WSUBM +
+               threadRowInWarp * TM + i];
+      }
     }
+    for (uint wSubColIdx = 0; wSubColIdx < WNITER; ++wSubColIdx) {
+      for (uint i = 0; i < TN; ++i) {
+        reg_k[wSubColIdx * TN + i] =
+            shared_wk[(dotIdx * BN) + warpCol * WN + wSubColIdx * WSUBN +
+               threadColInWarp * TN + i];
+        reg_v[wSubColIdx * TN + i] =
+            shared_wv[(dotIdx * BN) + warpCol * WN + wSubColIdx * WSUBN +
+               threadColInWarp * TN + i];
+      }
+    }
+
+    // execute warptile matmul
+    for (uint wSubRowIdx = 0; wSubRowIdx < WMITER; ++wSubRowIdx) {
+      for (uint wSubColIdx = 0; wSubColIdx < WNITER; ++wSubColIdx) {
+        // calculate per-thread results
+        for (uint resIdxM = 0; resIdxM < TM; ++resIdxM) {
+          for (uint resIdxN = 0; resIdxN < TN; ++resIdxN) {
+            thread_result_k[(wSubRowIdx * TM + resIdxM) * (WNITER * TN) +
+                          (wSubColIdx * TN) + resIdxN] +=
+                reg_inp[wSubRowIdx * TM + resIdxM] *
+                reg_k[wSubColIdx * TN + resIdxN];
+            thread_result_v[(wSubRowIdx * TM + resIdxM) * (WNITER * TN) +
+                          (wSubColIdx * TN) + resIdxN] +=
+                reg_inp[wSubRowIdx * TM + resIdxM] *
+                reg_v[wSubColIdx * TN + resIdxN];
+          }
+        }
+      }
+    }
+  }
 }
 
 // Forward declaration of kernel function (implemented in paged_attention_cublas.cu)
