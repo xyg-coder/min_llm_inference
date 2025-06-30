@@ -124,9 +124,10 @@ __global__ void fill_new_k_v_cache_paged_attention_warp_tiling(
     static_assert(N_THREADS * 4 % BK == 0, "N_THREADS * 4 must be divisible by BK");
     static_assert(N_THREADS * 4 % BN == 0, "N_THREADS * 4 must be divisible by BK");
     static_assert(WSUBN % TN == 0, "WSUBN must be divisible by TN");
-    static_assert(WSUBM % TM == 0, "WSUBN must be divisible by TN");
+    static_assert(WSUBM % TM == 0, "WSUBM must be divisible by TM");
     static_assert(WSUBM <= WARP_SIZE, "WSUBM must be less than or equal to WARP_SIZE to avoid bank conflicts");
     static_assert(WSUBN <= WARP_SIZE, "WSUBN must be less than or equal to WARP_SIZE to avoid bank conflicts");
+    static_assert(TN >= 4, "TN must be greater than or equal to 4 to ensure we can use float4");
 
 
     int batch_idx = new_batch_idx[blockIdx.z];
@@ -197,23 +198,23 @@ __global__ void fill_new_k_v_cache_paged_attention_warp_tiling(
     for (int i_wm_iter = 0; i_wm_iter < WMITER; ++i_wm_iter) {
         for (int i_tm = 0; i_tm < TM; ++i_tm) {
             int output_row = output_block_row_id * BM + warp_row_id * WM + i_wm_iter * WSUBM + row_in_warp * TM + i_tm;
-            if (output_row >= cur_length) {
-                return;
-            }
-            int page_idx = output_row / PAGE_BLOCK_SIZE;
-            if (cached_paged_idx != page_idx) {
-                cached_paged_idx = page_idx;
-                cached_page_pos = page_table[page_idx];
-            }
+            if (output_row < cur_length) {
+                int page_idx = output_row / PAGE_BLOCK_SIZE;
+                if (cached_paged_idx != page_idx) {
+                    cached_paged_idx = page_idx;
+                    cached_page_pos = page_table[page_idx];
+                }
 
-            for (int i_wn_iter = 0; i_wn_iter < WNITER; ++i_wn_iter) {
-                for (int i_tn = 0; i_tn < TN; i_tn += 4) {
-                    int output_col = output_block_col_id * BN + warp_col_id * WN + i_wn_iter * WSUBN + col_in_warp * TN + i_tn;
-                    if (output_col < emb_dim) {
-                        int k_offset = (output_row % PAGE_BLOCK_SIZE) * emb_dim * 3 + emb_dim * K_CACHE_EMB_OFFSET + output_col;
-                        int v_offset = (output_row % PAGE_BLOCK_SIZE) * emb_dim * 3 + emb_dim * V_CACHE_EMB_OFFSET + output_col;
-                        reinterpret_cast<float4*>(cached_page_pos + k_offset)[0] = reinterpret_cast<float4*>(thread_result_k + (i_wm_iter * TM + i_tm) * WNITER * TN + i_wn_iter * TN + i_tn)[0];
-                        reinterpret_cast<float4*>(cached_page_pos + v_offset)[0] = reinterpret_cast<float4*>(thread_result_v + (i_wm_iter * TM + i_tm) * WNITER * TN + i_wn_iter * TN + i_tn)[0];
+                for (int i_wn_iter = 0; i_wn_iter < WNITER; ++i_wn_iter) {
+                    for (int i_tn = 0; i_tn < TN; i_tn += 4) {
+                        int output_col = output_block_col_id * BN + warp_col_id * WN + i_wn_iter * WSUBN + col_in_warp * TN + i_tn;
+                        if (output_col < emb_dim) {
+                            assert(output_col + 3 < emb_dim);
+                            int k_offset = (output_row % PAGE_BLOCK_SIZE) * emb_dim * 3 + emb_dim * K_CACHE_EMB_OFFSET + output_col;
+                            int v_offset = (output_row % PAGE_BLOCK_SIZE) * emb_dim * 3 + emb_dim * V_CACHE_EMB_OFFSET + output_col;
+                            reinterpret_cast<float4*>(cached_page_pos + k_offset)[0] = reinterpret_cast<float4*>(thread_result_k + (i_wm_iter * TM + i_tm) * WNITER * TN + i_wn_iter * TN + i_tn)[0];
+                            reinterpret_cast<float4*>(cached_page_pos + v_offset)[0] = reinterpret_cast<float4*>(thread_result_v + (i_wm_iter * TM + i_tm) * WNITER * TN + i_wn_iter * TN + i_tn)[0];
+                        }
                     }
                 }
             }

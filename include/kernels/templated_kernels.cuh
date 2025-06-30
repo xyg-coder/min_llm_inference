@@ -14,7 +14,7 @@ __device__ void load_from_page_table(
     int cached_paged_idx = -1;
     float* cached_page_pos = nullptr;
 
-    for (int i_row_inp = inner_row_inp; i_row_inp + ROW_STRIDE_INP <= BM; i_row_inp += ROW_STRIDE_INP) {
+    for (int i_row_inp = inner_row_inp; i_row_inp < BM; i_row_inp += ROW_STRIDE_INP) {
         float4 tmp;
         if (row_offset + i_row_inp >= cur_batch_length || k_offset + inner_col_inp * 4 >= emb_dim) {
             tmp = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -41,7 +41,7 @@ __device__ void load_from_kv(
     float* shared_wk_wv,
     int inner_row_wk_wv, int inner_col_wk_wv, int k_offset, int col_offset) {
 
-    for (int i_row_wk_wv = inner_row_wk_wv; i_row_wk_wv + ROW_STRIDE_WK_WV <= BK; i_row_wk_wv += ROW_STRIDE_WK_WV) {
+    for (int i_row_wk_wv = inner_row_wk_wv; i_row_wk_wv < BK; i_row_wk_wv += ROW_STRIDE_WK_WV) {
         float4 tmp;
         if (k_offset + i_row_wk_wv >= emb_dim || col_offset + inner_col_wk_wv * 4 >= emb_dim) {
             tmp = {0.0f, 0.0f, 0.0f, 0.0f};
