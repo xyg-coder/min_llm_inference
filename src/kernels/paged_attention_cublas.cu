@@ -268,7 +268,7 @@ void paged_attention_with_cublas(
     TensorFloat& latest_emb, TensorFloat& temp_placeholder,
     int n_new_items, int n_sequence, cublasHandle_t& handle) {
 
-    launch_fill_new_k_v_cache_paged_attention(page_table, new_batch_idx, lengths, wk, wv, n_new_items, n_sequence);
+    launch_fill_new_k_v_cache_paged_attention_warp_tiling(page_table, new_batch_idx, lengths, wk, wv, n_new_items, n_sequence);
 
     launch_get_latest_k_q_v_paged_attention_cublas(page_table, lengths, latest_emb, wk, wq, wv, q_output, temp_placeholder, handle, n_sequence);
 
