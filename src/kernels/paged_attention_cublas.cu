@@ -117,6 +117,18 @@ __global__ void fill_new_k_v_cache_paged_attention_warp_tiling(
     const float* wk, const float* wv,
     int n_sequence, int emb_dim) {
 
+    int batch_idx = new_batch_idx[blockIdx.z];
+    int cur_length = lengths[batch_idx];
+
+    // place the warp in the block
+    int warpIdx = threadIdx.x / WARPSIZE;
+    int warpRow = warpIdx / (BN / WN);
+    int warpCol = warpIdx % (BN / WN);
+
+    // The starting position is [output_block_row_id * BM, output_block_col_id * BN]
+    int cRow = blockIdx.y;
+    int cCol = blockIdx.x;
+
     constexpr int WMITER = (WM * WN) / (WARPSIZE * TM * TN * WNITER);
     constexpr int WSUBM = WM / WMITER;
     constexpr int WSUBN = WN / WNITER;
@@ -130,15 +142,6 @@ __global__ void fill_new_k_v_cache_paged_attention_warp_tiling(
     static_assert(WSUBM <= WARP_SIZE, "WSUBM must be less than or equal to WARP_SIZE to avoid bank conflicts");
     static_assert(WSUBN <= WARP_SIZE, "WSUBN must be less than or equal to WARP_SIZE to avoid bank conflicts");
     static_assert(TN >= 4, "TN must be greater than or equal to 4 to ensure we can use float4");
-
-
-    int batch_idx = new_batch_idx[blockIdx.z];
-    int cur_length = lengths[batch_idx];
-
-    // The starting position is [output_block_row_id * BM, output_block_col_id * BN]
-    int cRow = blockIdx.y;
-    int cCol = blockIdx.x;
-
     
     __shared__ float shared_inp[BM * BK];
     __shared__ float shared_wk[BK * BN];
@@ -149,8 +152,8 @@ __global__ void fill_new_k_v_cache_paged_attention_warp_tiling(
     }
     page_table += batch_idx * (n_sequence / PAGE_BLOCK_SIZE);
 
-    constexpr int rowStrideA = N_THREADS * 4 / BK;
-    constexpr int rowStrideB = N_THREADS * 4 / BN;
+    constexpr int rowStrideA = (N_THREADS * 4) / BK;
+    constexpr int rowStrideB = (N_THREADS * 4) / BN;
 
     // Place the thread in the block
     int innerRowA = (threadIdx.x / (BK / 4));
@@ -164,10 +167,6 @@ __global__ void fill_new_k_v_cache_paged_attention_warp_tiling(
     float thread_result_k[TM * WMITER * TN * WNITER] = {0};
     float thread_result_v[TM * WMITER * TN * WNITER] = {0};
 
-    // place the warp in the block
-    int warpIdx = threadIdx.x / WARPSIZE;
-    int warpRow = warpIdx / (BN / WN);
-    int warpCol = warpIdx % (BN / WN);
 
     // place the thread in the warp
     int threadIdxInWarp = threadIdx.x % WARPSIZE;
@@ -193,10 +192,6 @@ __global__ void fill_new_k_v_cache_paged_attention_warp_tiling(
             warpRow, warpCol, threadRowInWarp, threadColInWarp);
         __syncthreads();
     }
-
-    // row: cRow * BM + warpRow * WM + wSubRowIdx * WSUBM + threadRowInWarp * TM + resIdxM
-    // col: cCol * BN + warpCol * WN +  wSubColIdx * WSUBN + threadColInWarp * TN + resIdxN]
-    // result: wSubRowIdx * TM + resIdxM) * (WNITER * TN) + wSubColIdx * TN + resIdxN
 
     int cached_paged_idx = -1;
     float* cached_page_pos = nullptr;
@@ -239,8 +234,8 @@ void launch_fill_new_k_v_cache_paged_attention_warp_tiling(
     assert(page_table.shape()[1] == n_sequence / PAGE_BLOCK_SIZE && n_sequence % PAGE_BLOCK_SIZE == 0);
     int emb_dim = wk.shape()[0];
     assert(wk.shape()[0] == wk.shape()[1]);
-    constexpr int N_THREADS = 256;
-    constexpr int BM = 32, BN = 64, BK = 64, WM = 32, WN = 32, TM = 4, TN = 4, WNITER = 2;
+    constexpr int N_THREADS = 128;
+    constexpr int BM = 64, BN = 64, BK = 64, WM = 32, WN = 32, TM = 4, TN = 4, WNITER = 2;
 
     fill_new_k_v_cache_paged_attention_warp_tiling<BM, BN, BK, WM, WN, TM, TN, WNITER, N_THREADS>
         <<<dim3(ceil_div(emb_dim, BN), ceil_div(n_sequence, BM), n_new_items), N_THREADS>>>(
@@ -273,7 +268,7 @@ void paged_attention_with_cublas(
     TensorFloat& latest_emb, TensorFloat& temp_placeholder,
     int n_new_items, int n_sequence, cublasHandle_t& handle) {
 
-    launch_fill_new_k_v_cache_paged_attention(page_table, new_batch_idx, lengths, wk, wv, n_new_items, n_sequence);
+    launch_fill_new_k_v_cache_paged_attention_warp_tiling(page_table, new_batch_idx, lengths, wk, wv, n_new_items, n_sequence);
 
     launch_get_latest_k_q_v_paged_attention_cublas(page_table, lengths, latest_emb, wk, wq, wv, q_output, temp_placeholder, handle, n_sequence);
 

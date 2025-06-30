@@ -53,6 +53,8 @@ make # build and run tests
 
 ## Profiling Result
 
+### Putting page_table to shared_memory
+
 `./build/to_profile`
 
 The `get_latest_k_q_v_paged_attention` is talking the longest time.
@@ -69,10 +71,16 @@ After putting to shared:
 Total tokens: 197136, seconds: 8.761, throughput: 22501.5
 Compute throughput: 24%
 
+### Using cublas
+
 Use cublas inside the paged attention:
 Total tokens: 196539, seconds: 2.314, throughput: 84934.7
 
+### Warp tiling
+
+(3.17x speed up. Run warp_tiling_test)
+Throughput: 123284
+
 ## Plan
 
-* Fix the warp-tiling version
 * How to use multi-gpus to accelerate
